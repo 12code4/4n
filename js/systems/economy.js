@@ -11,6 +11,7 @@
     if (G.Renown && G.Renown.hasPerk('sell5')) bonus += 0.05;      // renown tier perk
     if (G.Rivals) bonus += G.Rivals.claimSellBonus(matId);          // player-owned biome claim
     if (G.Prestige && G.Prestige.fx('legacySell')) bonus += G.Prestige.fx('legacySell'); // Old Colours
+    if (G.state.questPerks && G.state.questPerks.heart_trade) bonus += 0.08; // the Trade ending
     var mult = (1 + bonus) * (G.Relics ? G.Relics.mult('sellMult') : 1); // relic
     return Math.max(1, Math.round(p * mult));
   };
@@ -196,6 +197,7 @@
     G.Delvers.dailyHeal();
     G.Delvers.refreshPool();
     if (G.Achieve) G.Achieve.check();
+    if (G.Daily) G.Daily.checkEnd();
   };
 
   /* End the day: the core surface tick. Blocked while an expedition is below. */

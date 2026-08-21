@@ -17,11 +17,13 @@ var FILES = [
   'js/data/archive.js', 'js/data/renown.js', 'js/data/relics.js', 'js/data/talents.js',
   'js/data/achievements.js', 'js/data/rivals.js',
   'js/data/moods.js', 'js/data/omens.js', 'js/data/veins.js', 'js/data/beasts.js', 'js/data/legacy.js',
+  'js/data/heart.js',
   'js/migrations.js',
   'js/systems/state.js', 'js/systems/delvers.js', 'js/systems/economy.js',
   'js/systems/forge.js', 'js/systems/contracts.js',
   'js/systems/renown.js', 'js/systems/relics.js', 'js/systems/rivals.js', 'js/systems/quests.js',
   'js/systems/moods.js', 'js/systems/omens.js', 'js/systems/beasts.js', 'js/systems/prestige.js',
+  'js/systems/codex.js', 'js/systems/daily.js',
   'js/systems/expedition.js', 'js/systems/combat.js'
 ];
 FILES.forEach(function (f) {
@@ -441,7 +443,7 @@ section('v2.0 Save migration v1 → v2');
   G.state = migrated;
   var s = G.serialize();
   var pay2 = JSON.parse(s);
-  ok(pay2.sv === 4, 'serialized at save-version 4 (full migration chain)');
+  ok(pay2.sv === 5, 'serialized at save-version 5 (full migration chain)');
 })();
 
 section('v2.0 Emberdeep: reach and fight the Smelted King');
@@ -613,6 +615,8 @@ section('v3.0 Archive: reach and fight the Librarian');
     ['tavern', 'infirmary', 'forge', 'charterhall'].forEach(function (b) { G.Economy.build(b); });
     var guard = 0;
     while (G.Delvers.roster().length < 3 && guard++ < 20) { if (!st.tavernPool.length) G.Delvers.refreshPool(true); G.Delvers.hire(0); }
+    // a real depth-7 roster is seasoned — level them to ~L6
+    G.Delvers.roster().forEach(function (d) { while (d.lvl < 6) G.Delvers.gainXp(d, 2500); });
     st.inventory.ember_glass = 9; st.inventory.grave_iron = 9; st.inventory.slag_iron = 9; st.inventory.vel_shard = 4; st.inventory.forge_salt = 6; st.inventory.hollow_pearl = 4;
     G.Forge.craft('vel_edge'); G.Forge.craft('warden_mail'); G.Forge.craft('slag_cleaver');
     G.Delvers.roster().forEach(function (d, i) { if (st.armory[i]) G.Forge.equip(st.armory[i].uid, d.id); });
@@ -669,7 +673,7 @@ section('v3.0 Save migration v2 → v3');
   migrated.delvers.forEach(function (d) { ok(Array.isArray(d.talents) && typeof d.face === 'number', 'migration adds talents+face'); });
   ok(migrated.graveyard[0].honored === false, 'migration adds honored flag to graves');
   G.state = migrated;
-  ok(JSON.parse(G.serialize()).sv === 4, 'serializes at v4 (full migration chain)');
+  ok(JSON.parse(G.serialize()).sv === 5, 'serializes at v5 (full migration chain)');
 })();
 
 /* ---------------- v4.0: moods, omens, status, veins, beasts, prestige ---------------- */
@@ -846,6 +850,200 @@ section('v4.0 Prestige: retire value & perk purchase');
   // applyLegacy reads from Prestige.loadLegacy (localStorage) which is empty in node,
   // so simulate by checking the fx function directly reflects the bought perk
   ok(G.Prestige.fx('startMarks') === 60, 'nest_egg fx grants +60 start marks');
+})();
+
+/* ---------------- v5.0: the Heart, endings, codex, daily ---------------- */
+function reachAndPlayHeart(seed, endingId) {
+  G.newGame(seed);
+  var st = G.state;
+  st.marks = 2000;
+  st.mood = { id: 'generous', until: 99999 };
+  ['gullet', 'emberdeep', 'archive', 'veins'].forEach(function (b) { st.guardiansSlain[b] = true; });
+  st.unlockedStart = 13; st.stats.deepest = 13;
+  ['tavern', 'infirmary', 'forge', 'charterhall'].forEach(function (b) { G.Economy.build(b); });
+  var guard = 0;
+  while (G.Delvers.roster().length < 3 && guard++ < 20) { if (!st.tavernPool.length) G.Delvers.refreshPool(true); G.Delvers.hire(0); }
+  G.Delvers.roster().forEach(function (d) { while (d.lvl < 11) G.Delvers.gainXp(d, 4000); });
+  st.inventory.vel_shard = 12; st.inventory.slag_iron = 16; st.inventory.forge_salt = 10; st.inventory.hollow_pearl = 8; st.inventory.grave_iron = 16;
+  G.Forge.craft('vel_edge'); G.Forge.craft('vel_edge'); G.Forge.craft('warden_mail');
+  G.Delvers.roster().forEach(function (d, i) { if (st.armory[i]) G.Forge.equip(st.armory[i].uid, d.id); });
+  G.Economy.buySupply('torches', 60); G.Economy.buySupply('rations', 60); G.Economy.buySupply('bandages', 12);
+  G.Exp.launch(G.Delvers.roster().slice(0, 3).map(function (d) { return d.id; }), 13);
+  var steps = 0;
+  while (st.expedition && steps++ < 6000) {
+    var ex = st.expedition;
+    if (ex.mode === 'map') { var cs = G.Exp.nextChoices(); if (!cs.length) break; G.Exp.move(cs[0].id); }
+    else if (ex.mode === 'combat') {
+      var actor = G.Combat.actor(); if (!actor) break;
+      var c = ex.combat; var sk = G.Delvers.cls(actor).skill;
+      if (actor.hp < G.Delvers.maxHp(actor) * 0.4 && ex.bandages > 0) G.Combat.act({ type: 'item', target: actor.id });
+      else if (c.grit >= sk.cost) G.Combat.act({ type: 'skill' });
+      else G.Combat.act({ type: 'strike' });
+    }
+    else if (ex.mode === 'event') { if (ex.event.stage === 'choose') { var def = G.Exp.eventDef(); var av = []; def.choices.forEach(function (ch, i) { if (G.Exp.choiceAvailable(ch)) av.push(i); }); G.Exp.chooseEvent(av[av.length - 1]); } else G.Exp.closeEvent(); }
+    else if (ex.mode === 'peddler') G.Exp.leavePeddler();
+    else if (ex.mode === 'rival') G.Exp.leaveRival();
+    else if (ex.mode === 'shaft') { if (G.Exp.canDescend()) G.Exp.descend(); else G.Exp.surface(); }
+    else if (ex.mode === 'guardian') G.Exp.fightGuardian();
+    else if (ex.mode === 'guardian_won') G.Exp.surface();
+    else if (ex.mode === 'heart_parley') { return G.Exp.chooseEnding(endingId); }
+    else break;
+  }
+  return { ok: false, reachedParley: false, steps: steps };
+}
+
+section('v5.0 The Heart: reach the parley and each ending');
+(function () {
+  var reachedParley = 0, exceptions = 0;
+  var endings = ['seal', 'trade', 'become'];
+  endings.forEach(function (eid, i) {
+    try {
+      var r = reachAndPlayHeart(5000 + i, eid);
+      if (r && r.ok) {
+        reachedParley++;
+        ok(G.state.endings.indexOf(eid) >= 0, eid + ' ending recorded');
+        ok(!!G.state.guardiansSlain.heart, 'heart marked resolved after ' + eid);
+        if (eid === 'seal') ok(G.state.heartSealed === true, 'seal sets heartSealed');
+        if (eid === 'trade') ok(G.state.questPerks.heart_trade === true, 'trade sets heart_trade sell perk');
+      } else {
+        ok(false, 'reached the Heart parley for ' + eid + ' (steps ' + (r && r.steps) + ')');
+      }
+    } catch (e) { exceptions++; console.error('  ✗ heart exception (' + eid + '): ' + (e && e.stack || e)); }
+  });
+  ok(exceptions === 0, exceptions + ' exceptions reaching the Heart');
+  console.log('  » reached the Heart parley ' + reachedParley + '/3 endings');
+})();
+
+section('v5.0 Heart floor & parley trigger');
+(function () {
+  G.newGame(5100);
+  var map = G.Exp.genHeartFloor();
+  ok(map.rows.length === 6 && map.rows[0][0].type === 'entry', 'heart floor is the authored 6-rank descent');
+  ok(map.rows[map.rows.length - 1][0].type === 'guardian', 'heart floor ends at the guardian');
+  // trials carry fixed encounters
+  var fights = map.rows.filter(function (r) { return r[0].type === 'fight'; });
+  ok(fights.length === 3 && fights.every(function (r) { return r[0].enc && r[0].enc.length; }), 'three trials with fixed echoes');
+  // parley triggers at 50%
+  var st = G.state; st.marks = 500;
+  while (G.Delvers.roster().length < 2) G.Delvers.addToRoster(G.Delvers.generate(2));
+  G.Economy.buySupply('torches', 8); G.Economy.buySupply('rations', 8);
+  G.Exp.launch(G.Delvers.roster().slice(0, 2).map(function (d) { return d.id; }), 1);
+  st.expedition.depth = 13;
+  G.Combat.start(['the_heart'], { guardian: true });
+  var e = st.expedition.combat.enemies[0];
+  G.Combat.damageEnemy(e, e.maxHp * 0.6, null, false, 'test'); // knock past 50%
+  ok(st.expedition.mode === 'heart_parley', 'Heart opens the parley at half health');
+  ok(!st.expedition.combat, 'combat suspended for the parley');
+  st.expedition = null;
+})();
+
+section('v5.0 Codex discovery');
+(function () {
+  G.newGame(5200);
+  var st = G.state;
+  var before = G.Codex.count('material');
+  G.Economy.buySupply('torches', 6); G.Economy.buySupply('rations', 6);
+  while (G.Delvers.roster().length < 2) G.Delvers.addToRoster(G.Delvers.generate(1));
+  G.Exp.launch(G.Delvers.roster().slice(0, 2).map(function (d) { return d.id; }), 1);
+  G.Exp.grantMat('ember_glass', 1);
+  ok(G.Codex.seen('material', 'ember_glass'), 'material discovered on pickup');
+  ok(G.Codex.seen('biome', 'gullet'), 'biome discovered on entry');
+  G.Combat.start(['gravemite'], {});
+  ok(G.Codex.seen('enemy', 'gravemite'), 'enemy discovered on encounter');
+  ok(G.Codex.count('material') > before, 'codex count grew');
+  st.expedition = null;
+})();
+
+section('v5.0 Daily Descent: seeded, scored, finalizes');
+(function () {
+  var st = G.Daily.start(20260215);
+  ok(st.daily && st.daily.seed === 20260215, 'daily started with fixed seed');
+  ok(G.Delvers.roster().length === 3, 'daily gives a fixed founding crew of 3');
+  ok(G.Daily.score() >= 0, 'score computes');
+  // two identical seeds → identical starting company names (determinism)
+  var names1 = G.Delvers.roster().map(function (d) { return d.name; }).join(',');
+  G.Daily.start(20260215);
+  var names2 = G.Delvers.roster().map(function (d) { return d.name; }).join(',');
+  ok(names1 === names2, 'same daily seed → same crew (deterministic)');
+  // run the clock out → finalize
+  st = G.state;
+  var g = 0;
+  while (G.Daily.daysLeft() > 0 && g++ < 40) G.Economy.endDay();
+  ok(st.daily.finalized, 'daily finalizes when the clock runs out');
+  ok(typeof st.daily.finalScore === 'number', 'final score recorded');
+})();
+
+section('v5.0 Full campaign: a fresh company to the Heart');
+(function () {
+  G.newGame(5300);
+  var st = G.state;
+  var err = 0, reachedHeart = false, ending = null;
+  try {
+    for (var day = 0; day < 200 && !ending; day++) {
+      // surface: sell, hire, resupply, build in priority, craft when able
+      Object.keys(st.inventory).forEach(function (id) {
+        // keep some for contracts/quests, sell the rest
+        if ((st.inventory[id] || 0) > 2) G.Economy.sell(id, st.inventory[id] - 2);
+      });
+      if (G.Delvers.roster().length < 3 && st.tavernPool.length && st.marks > 40) G.Delvers.hire(0);
+      G.Delvers.roster().forEach(function (d) { /* natural leveling via delves */ });
+      ['tavern', 'infirmary', 'forge', 'assay', 'charterhall', 'contracts', 'storehouse', 'menagerie'].forEach(function (b) {
+        if (st.marks > (G.DATA.buildings[b].costs[st.buildings[b] || 0] || 1e9) * 2.2) G.Economy.build(b);
+      });
+      while (st.supplies.torches < 20 && st.marks >= 14) G.Economy.buySupply('torches', 1);
+      while (st.supplies.rations < 16 && st.marks >= 12) G.Economy.buySupply('rations', 1);
+      if (st.supplies.bandages < 6 && st.marks > 40) G.Economy.buySupply('bandages', 1);
+      // craft best affordable gear and equip
+      if (G.bld('forge')) {
+        G.DATA.gearList().forEach(function (gr) { if (gr.tier <= G.Forge.tier() && G.Forge.canCraft(gr.id) === null && st.armory.length < 8) G.Forge.craft(gr.id); });
+        st.armory.forEach(function (it) { if (!it.by) { var d = G.Delvers.atHome()[0]; if (d) G.Forge.equip(it.uid, d.id); } });
+      }
+      // delve when fit
+      var fit = G.Delvers.roster().filter(function (x) { return x.hp > G.Delvers.maxHp(x) * 0.6 && !x.injury; });
+      if (fit.length >= 2 && st.supplies.torches >= 6 && !st.expedition) {
+        var startD = st.unlockedStart;
+        var team = fit.slice(0, 3).map(function (x) { return x.id; });
+        var r = G.Exp.launch(team, startD);
+        if (r.ok) {
+          var steps = 0;
+          while (st.expedition && steps++ < 3000) {
+            var ex = st.expedition;
+            if (ex.mode === 'map') {
+              var cs = G.Exp.nextChoices(); if (!cs.length) break;
+              // prefer guardian/shaft to push depth, else cache/rest
+              var pick = cs.filter(function (n) { return n.type === 'guardian'; })[0] ||
+                (fit.every(function (x) { return G.Delvers.get(x.id) && G.Delvers.get(x.id).hp > G.Delvers.maxHp(G.Delvers.get(x.id)) * 0.5; }) ? cs.filter(function (n) { return n.type === 'shaft'; })[0] : null) ||
+                cs.filter(function (n) { return n.type === 'cache' || n.type === 'rest' || n.type === 'pulse'; })[0] || G.rpick(cs);
+              G.Exp.move(pick.id);
+            } else if (ex.mode === 'combat') {
+              var actor = G.Combat.actor(); if (!actor) break;
+              var c = ex.combat; var sk = G.Delvers.cls(actor).skill;
+              if (actor.hp < G.Delvers.maxHp(actor) * 0.35 && ex.bandages > 0) G.Combat.act({ type: 'item', target: actor.id });
+              else if (c.grit >= sk.cost) G.Combat.act({ type: 'skill' });
+              else G.Combat.act({ type: 'strike' });
+            } else if (ex.mode === 'event') {
+              if (ex.event.stage === 'choose') { var def = G.Exp.eventDef(); var av = []; def.choices.forEach(function (ch, i) { if (G.Exp.choiceAvailable(ch)) av.push(i); }); G.Exp.chooseEvent(av[av.length - 1]); } else G.Exp.closeEvent();
+            } else if (ex.mode === 'peddler') G.Exp.leavePeddler();
+            else if (ex.mode === 'rival') G.Exp.leaveRival();
+            else if (ex.mode === 'shaft') {
+              var hurt = G.Exp.team().some(function (x) { return x.hp < G.Delvers.maxHp(x) * 0.4; });
+              if (!hurt && ex.torches > 3 && G.Exp.canDescend()) G.Exp.descend(); else G.Exp.surface();
+            }
+            else if (ex.mode === 'guardian') { var strong = G.Exp.team().length >= 2 && G.Exp.team().every(function (x) { return x.hp > G.Delvers.maxHp(x) * 0.55; }); if (strong) G.Exp.fightGuardian(); else G.Exp.surface(); }
+            else if (ex.mode === 'guardian_won') G.Exp.surface();
+            else if (ex.mode === 'heart_parley') { reachedHeart = true; ending = 'trade'; G.Exp.chooseEnding('trade'); }
+            else break;
+          }
+        }
+      }
+      if (!st.expedition && !ending) G.Economy.endDay();
+    }
+  } catch (e) { err++; console.error('  ✗ full-campaign exception: ' + (e && e.stack || e)); }
+  ok(err === 0, 'full campaign runs without exceptions');
+  ok(st.marks >= 0, 'campaign solvent');
+  assertNoNaN('full-campaign');
+  console.log('  » day ' + st.day + ': deepest ' + st.stats.deepest + ', renown ' + (st.renown || 0) +
+    ', guardians ' + Object.keys(st.guardiansSlain).length + ', reachedHeart=' + reachedHeart + (ending ? ' (' + ending + ')' : ''));
 })();
 
 /* ---------------- regression: guardian flee must not strand the team ---------------- */

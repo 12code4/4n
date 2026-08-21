@@ -28,16 +28,24 @@ Saves live in your browser (localStorage) with export/import strings as backup.
 
 ## The game
 
-- **Tycoon surface:** hire delvers, raise buildings, stock the shop, ride the
-  market, sign contracts, pay wages — or don't, and watch your roster walk.
-- **Roguelite depths:** branching node-map expeditions, turn-based combat with a
-  shared Grit economy, push-your-luck torchlight, permadeath, guardians gating
-  each biome, and a story that only exists below a certain depth.
-- **One entity:** the market's moods and the dungeon's moods are the same moods.
+- **Tycoon surface:** hire delvers, raise nine buildings, forge gear, ride a
+  moody market, sign contracts, race rival charters, earn renown, keep a
+  menagerie — or fall behind, and watch your roster walk.
+- **Roguelite depths:** branching node-map expeditions through five biomes
+  (depths 1–13), turn-based combat with a shared Grit economy, status effects,
+  telegraphed intents, push-your-luck torchlight, permadeath, and a guardian
+  gating every biome.
+- **One entity:** the Maw has **moods** that drive the market and the dungeon
+  at once. Choose **omens** before a run; bank **Legacy Marks** by retiring a
+  charter; take a **companion beast** below.
+- **The last trade:** thirteen floors down waits the Heart of the Maw, and a
+  choice — **Seal it. Trade with it. Or become it.** Three endings; a seeded
+  **Daily Descent**; a full **Codex**; a synthesized soundscape.
 
-See [docs/DESIGN.md](docs/DESIGN.md) for the full design document and
-[docs/ROADMAP.md](docs/ROADMAP.md) for the version plan.
-[CHANGELOG.md](CHANGELOG.md) records what each major version shipped.
+Five major versions, from the founding charter to the Heart — see
+[CHANGELOG.md](CHANGELOG.md). The full design is in [docs/DESIGN.md](docs/DESIGN.md),
+the plan in [docs/ROADMAP.md](docs/ROADMAP.md), and per-patch notes in
+[docs/patches/](docs/patches/).
 
 ## Development
 

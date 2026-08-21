@@ -34,6 +34,10 @@
       omenOffer: null, omenChosen: [],     // v4 per-outfitting omen choice
       beasts: { owned: [], active: null }, // v4 companion beasts
       legacy: { marks: 0, perks: [] },     // v4 prestige (overwritten by applyLegacy)
+      codex: { enemy: {}, material: {}, relic: {}, mood: {}, biome: {}, ending: {}, beast: {} }, // v5
+      endings: [],                         // v5 endings reached
+      heartOutcome: null, heartSealed: false, // v5
+      daily: null,                         // v5 daily descent state
       unlockedStart: 1,                    // deepest depth an expedition may START at
       guardiansSlain: {},                  // biomeId -> true
       expedition: null,

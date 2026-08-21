@@ -15,6 +15,7 @@
     if (!G.bld('menagerie')) { G.log('You’ve nowhere to keep a ' + G.DATA.beasts[id].name + ' — build the Menagerie first. It slips away.', 'bad'); return false; }
     if (B.owned().length >= B.capacity()) { G.log('The Menagerie is full. The ' + G.DATA.beasts[id].name + ' is set loose.', 'bad'); return false; }
     st.beasts.owned.push(id);
+    if (G.Codex) G.Codex.discover('beast', id);
     G.log('A ' + G.DATA.beasts[id].name + ' is brought home to the Menagerie.', 'good');
     G.emit('beasts');
     return true;

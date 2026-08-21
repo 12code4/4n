@@ -5,6 +5,7 @@
 
   /* ---------- map generation ---------- */
   X.genFloor = function (depth) {
+    if (depth === 13) return X.genHeartFloor();
     var biome = G.DATA.biomeForDepth(depth);
     var nRanks = G.rint(G.BAL.ranksPerFloor[0], G.BAL.ranksPerFloor[1]);
     var rows = [];
@@ -88,6 +89,27 @@
     return { depth: depth, biome: biome.id, rows: rows };
   };
 
+  /* The Heart floor (depth 13): a hand-authored linear descent — an antechamber
+   * to breathe, three trials that quote the biomes you passed, then the Heart. */
+  X.genHeartFloor = function () {
+    var id = 0;
+    function node(type, r, extra) {
+      var n = { id: 'h13_' + (id++), r: r, c: 0, type: type, edges: [], done: false };
+      if (extra) for (var k in extra) n[k] = extra[k];
+      return n;
+    }
+    var rows = [
+      [node('entry', 0)],
+      [node('rest', 1)],                                   // antechamber — breathe
+      [node('fight', 2, { enc: ['echo_warden'], trial: 'the toll' })],
+      [node('fight', 3, { enc: ['echo_king'], trial: 'the crown' })],
+      [node('fight', 4, { enc: ['echo_auricle'], trial: 'the listening' })],
+      [node('guardian', 5)]                                // the Heart
+    ];
+    for (var r = 0; r < rows.length - 1; r++) rows[r][0].edges.push(rows[r + 1][0].id);
+    return { depth: 13, biome: 'heart', rows: rows };
+  };
+
   X.findNode = function (map, id) {
     for (var r = 0; r < map.rows.length; r++)
       for (var c = 0; c < map.rows[r].length; c++)
@@ -101,6 +123,7 @@
     if (st.expedition) return 'An expedition is already below.';
     if (!teamIds.length || teamIds.length > G.BAL.teamMax) return 'Take 1–' + G.BAL.teamMax + ' delvers.';
     if (depth < 1 || depth > st.unlockedStart) return 'That depth is not yet opened.';
+    if (depth === 13 && st.heartSealed) return 'The stair to the Heart is collapsed. What is sealed stays sealed.';
     for (var i = 0; i < teamIds.length; i++) {
       var d = G.Delvers.get(teamIds[i]);
       if (!d || !d.alive) return 'A chosen delver is unavailable.';
@@ -143,6 +166,7 @@
   X.enterFloor = function (depth) {
     var st = G.state, ex = st.expedition;
     ex.depth = depth;
+    if (G.Codex) G.Codex.discover('biome', G.DATA.biomeForDepth(depth).id);
     if (depth > (st.stats.deepest || 0)) {
       st.stats.deepest = depth;
       if (G.Renown) G.Renown.award('depthRecord'); // new company record
@@ -244,7 +268,8 @@
     switch (node.type) {
       case 'fight': {
         node.done = true;
-        G.Combat.start(X.buildEncounter(depth), {});
+        if (node.trial) X.elog('A trial of the Heart: ' + node.trial + '.', 'story');
+        G.Combat.start(node.enc || X.buildEncounter(depth), {});
         break;
       }
       case 'guardian': {
@@ -471,6 +496,7 @@
   X.grantMat = function (id, qty) {
     var ex = G.state.expedition;
     ex.loot[id] = (ex.loot[id] || 0) + qty;
+    if (G.Codex) G.Codex.discover('material', id);
     X.elog('+' + qty + '× ' + G.DATA.materials[id].name, 'loot');
   };
   X.grantLootValue = function (value) {
@@ -589,6 +615,7 @@
     if (depth >= G.DATA.maxDepth()) return false;
     var biome = G.DATA.biomeForDepth(depth);
     if (depth === biome.depths[1] && !st.guardiansSlain[biome.id]) return false; // guardian bars the stair
+    if (depth + 1 === 13 && st.heartSealed) return false; // the Heart's stair was collapsed
     return true;
   };
   X.descend = function () {
@@ -607,10 +634,57 @@
     G.emit('expedition');
   };
 
+  /* ---------- the Heart's three endings (v5.0) ---------- */
+  X.chooseEnding = function (endingId) {
+    var st = G.state, ex = st.expedition;
+    if (!ex || ex.mode !== 'heart_parley') return { ok: false };
+    var end = G.DATA.endings[endingId];
+    if (!end) return { ok: false };
+    // the Heart pays out its whole account, whatever you decide
+    X.grantMat('heart_ember', G.rint(3, 5));
+    X.grantMat('held_breath', G.rint(2, 3));
+    ex.marksFound += G.rint(150, 250);
+    st.guardiansSlain.heart = true;
+    if (G.Exp.unlockJournal) X.unlockJournal('guardian_heart');
+    // record the ending (once per kind)
+    st.endings = st.endings || [];
+    if (st.endings.indexOf(endingId) < 0) st.endings.push(endingId);
+    st.heartOutcome = endingId;
+    if (G.Codex) G.Codex.discover('ending', endingId);
+
+    // ending-specific, lasting effects
+    if (endingId === 'seal') {
+      st.heartSealed = true;                 // the rift dims; no re-entry
+      if (G.Renown) G.Renown.award(null, 120);
+    } else if (endingId === 'trade') {
+      st.questPerks = st.questPerks || {};
+      st.questPerks.heart_trade = true;      // +8% sell forever; the Vault stays open
+      if (G.Renown) G.Renown.award(null, 100);
+    } else if (endingId === 'become') {
+      // a large legacy windfall, banked to the persistent store
+      if (G.Prestige) {
+        var leg = G.Prestige.loadLegacy();
+        leg.marks = (leg.marks || 0) + 6;
+        G.Prestige.saveLegacy(leg);
+        st.legacy.marks = (st.legacy.marks || 0) + 6;
+      }
+      if (G.Renown) G.Renown.award(null, 80);
+    }
+    if (G.Achieve) G.Achieve.grant('heart_' + endingId);
+    ex.endingId = endingId;
+    // carry the choice into the surface summary; the UI shows the epilogue
+    var summary = X.surface();
+    summary.ending = endingId;
+    st.lastRun = summary;
+    G.emit('ending', { id: endingId });
+    return { ok: true, ending: endingId };
+  };
+
   /* ---------- going home ---------- */
   X.surface = function () {
     var st = G.state, ex = st.expedition;
     if (!ex) return;
+    var endingId = ex.endingId || null; // set when surfacing from a Heart ending
     var haul = 0;
     for (var id in ex.loot) {
       st.inventory[id] = (st.inventory[id] || 0) + ex.loot[id];
@@ -636,7 +710,8 @@
     var summary = {
       haul: haul, marks: ex.marksFound, days: ex.daysOut,
       kills: ex.killCount, depth: st.stats.deepest, wiped: false,
-      survivors: X.team().length
+      survivors: X.team().length,
+      ending: endingId // present only for a Heart ending, so the epilogue owns the modal
     };
     // achievement: end a depth-3+ run with the torches spent
     if (G.Achieve && ex.startDepth >= 3 && ex.torches === 0) G.Achieve.grant('no_torch');

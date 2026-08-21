@@ -64,4 +64,18 @@
     });
     return st;
   };
+
+  // v4 (4.0 "The Living Maw") → v5 (5.0 "The Heart of It")
+  G.migrations[4] = function (st) {
+    if (!st.codex) st.codex = {};
+    ['enemy', 'material', 'relic', 'mood', 'biome', 'ending', 'beast'].forEach(function (k) { if (!st.codex[k]) st.codex[k] = {}; });
+    if (!st.endings) st.endings = [];
+    if (st.heartOutcome === undefined) st.heartOutcome = null;
+    if (st.heartSealed === undefined) st.heartSealed = false;
+    if (st.daily === undefined) st.daily = null;
+    G.DATA.materialList().forEach(function (m) {
+      if (st.market[m.id] === undefined) st.market[m.id] = m.base;
+    });
+    return st;
+  };
 })();

@@ -1,5 +1,46 @@
 # Changelog — The Gilded Maw
 
+## v5.0 — "The Heart of It"
+
+The last trade. Everything the game has taught converges at depth 13, and the
+whole thing gets its final coat of lacquer.
+
+### The finale — depth 13, The Heart
+- A hand-authored final descent: an antechamber, then three **trials** that
+  quote the biomes you passed (the Warden, the King, the Auricle in gold), then
+  **The Heart of the Maw** itself.
+- The Heart is part boss, part negotiation: fight it to half health and it
+  **stops**, opens your company's real lifetime ledger, and asks Maren's
+  question back — *what is the company FOR?*
+- **Three endings**, each with a written epilogue: **Seal It** (collapse the
+  stair), **Trade With It** (a perpetual charter — +8% sell forever, the Vault
+  stays open), **Become It** (take the keeper's seat → New Charter+ with a
+  legacy windfall). Journal pages 10–12 pay the story off; all three endings
+  are trackable in the Codex.
+
+### Daily Descent
+- A seeded challenge: the same Maw for everyone on a given date, a fixed
+  founding crew, 14 days to build the highest score. Per-seed local best;
+  your career save is stashed and restored when you leave.
+
+### The soundscape (WebAudio, no files)
+- Fully synthesized: per-biome drones, combat impacts, coin ticks, a music-box
+  motif for Maren's journal pages, mood stingers. Mute toggle in the HUD;
+  volume/state persisted.
+
+### The Codex & the title
+- A living **Codex** of every enemy, material, biome, relic, beast, mood and
+  ending discovered — undiscovered entries stay "???".
+- A painted **title screen** (Continue / New Charter / Daily Descent / Codex)
+  over the golden rift.
+
+### Polish & balance
+- Balance verified across the whole 1→13 curve with leveled-roster boss sims
+  (every guardian winnable with appropriate preparation, brutal when
+  under-levelled). Save migration v4 → v5. New art: the Heart, the gold echoes,
+  the title vista, the Codex. Full suite: 25.5k+ checks including all three
+  Heart endings, the parley trigger, Codex discovery, and the Daily Descent.
+
 ## v4.0 — "The Living Maw"
 
 The Maw stops being a place and becomes a counterparty — with moods, appetites,

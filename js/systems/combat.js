@@ -120,6 +120,7 @@
         G.Exp.elog(d.name + ' is shaken — ' + fear.name.toLowerCase() + '.', 'bad');
       }
     });
+    if (G.Codex) enemies.forEach(function (e) { G.Codex.discover('enemy', e.id); });
     var names = enemies.map(function (e) { return e.name; }).join(', ');
     G.Exp.elog('Ambush! ' + names + '!', 'bad');
     C.newRound();
@@ -443,6 +444,17 @@
     var es = estatus(e);
     if (es.ward) { es.ward = false; G.Exp.elog(e.name + '’s ward flares and eats the blow.', 'info'); G.emit('fx', { t: 'status', side: 'enemy', uid: e.uid, kind: 'ward' }); return; }
     e.hp -= dmg;
+    // The Heart doesn't die — at half its accounting, it stops and opens the ledger.
+    if (e.id === 'the_heart' && e.hp <= e.maxHp * 0.5 && !C.cur().heartTriggered) {
+      C.cur().heartTriggered = true;
+      e.hp = Math.max(1, Math.round(e.maxHp * 0.5));
+      G.Exp.elog('The Heart stops. The beating you have chased for thirteen floors goes quiet, and it slides a blank card across the desk.', 'story');
+      G.state.expedition.combat = null;
+      G.state.expedition.mode = 'heart_parley';
+      G.emit('combatEnd', 'parley');
+      G.emit('expedition');
+      return;
+    }
     G.Exp.elog((label ? label + ': ' : '') + (src ? src.name : '?') + ' hits ' + e.name + ' for ' + dmg + (crit ? ' — critical!' : '.'), crit ? 'crit' : 'info');
     G.emit('fx', { t: 'hit', side: 'enemy', uid: e.uid, amt: dmg, crit: crit });
     if (e.hp <= 0) {

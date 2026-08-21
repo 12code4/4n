@@ -47,6 +47,7 @@
 
     if (ex.mode === 'event') return renderEvent(panel);
     if (ex.mode === 'rival') return UI.renderRival(panel);
+    if (ex.mode === 'heart_parley') return UI.renderHeartParley(panel);
     if (ex.mode === 'peddler') return renderPeddler(panel);
     if (ex.mode === 'shaft') return renderShaft(panel);
     if (ex.mode === 'guardian') return renderGuardianApproach(panel);

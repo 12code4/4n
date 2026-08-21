@@ -11,6 +11,7 @@
 
 <div id="hud" class="hidden">
   <span class="title">THE GILDED MAW</span>
+  <span class="stat hidden" id="hud-daily"></span>
   <span class="stat"><b id="hud-marks">0</b><span>ᵯ</span></span>
   <span class="stat"><b id="hud-day">1</b><span>day</span></span>
   <span class="stat" id="hud-supplies"><span></span></span>
@@ -19,7 +20,9 @@
   <span class="spacer"></span>
   <button id="hud-endday" class="small">End Day ▸</button>
   <button id="hud-journal" class="small">Journal</button>
+  <button id="hud-codex" class="small">Codex</button>
   <button id="hud-ledger" class="small">Ledger</button>
+  <button id="hud-audio" class="small" title="Sound">🔊</button>
   <button id="hud-menu" class="small">Menu</button>
 </div>
 
@@ -54,6 +57,7 @@
 <script src="js/data/veins.js"></script>
 <script src="js/data/beasts.js"></script>
 <script src="js/data/legacy.js"></script>
+<script src="js/data/heart.js"></script>
 <!-- migrations (after data, before systems) -->
 <script src="js/migrations.js"></script>
 <!-- systems -->
@@ -70,11 +74,14 @@
 <script src="js/systems/omens.js"></script>
 <script src="js/systems/beasts.js"></script>
 <script src="js/systems/prestige.js"></script>
+<script src="js/systems/codex.js"></script>
+<script src="js/systems/daily.js"></script>
 <script src="js/systems/expedition.js"></script>
 <script src="js/systems/combat.js"></script>
 <!-- gfx -->
 <script src="js/gfx/draw.js"></script>
 <script src="js/gfx/portrait.js"></script>
+<script src="js/gfx/audio.js"></script>
 <script src="js/gfx/scenes.js"></script>
 <!-- ui -->
 <script src="js/ui/dom.js"></script>
@@ -83,6 +90,7 @@
 <script src="js/ui/charterhall.js"></script>
 <script src="js/ui/expedition.js"></script>
 <script src="js/ui/combat.js"></script>
+<script src="js/ui/endgame.js"></script>
 <!-- boot -->
 <script src="js/main.js"></script>
 </body>

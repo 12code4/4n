@@ -19,6 +19,7 @@
     var pool = G.DATA.moods.filter(function (m) { return m.id !== prev; });
     var m = G.rweighted(pool, function (x) { return x.w; });
     st.mood = { id: m.id, until: st.day + G.rint(2, 5) };
+    if (G.Codex) G.Codex.discover('mood', m.id);
     G.log('The Maw’s mood shifts: ' + m.name + '. ' + m.blurb, 'story');
     G.emit('mood', m);
   };

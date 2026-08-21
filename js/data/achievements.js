@@ -33,6 +33,13 @@
     { id: 'memorial', name: 'We Remember', desc: 'Honor a fallen delver at the memorial.', check: function (st) { return (st.stats.honored || 0) >= 1; } },
     { id: 'rival_beat', name: 'Not the Only Charter', desc: 'Best a rival crew underground.', check: function (st) { return (st.stats.rivalWins || 0) >= 1; } },
     { id: 'relic_bearer', name: 'Bearer of Old Things', desc: 'Slot a company relic.', check: function (st) { return st.relics && st.relics.slotted.length >= 1; } },
-    { id: 'gilded', name: 'The Gilded Charter', desc: 'Reach the highest renown tier.', check: function (st) { return (st.renown || 0) >= 400; } }
+    { id: 'gilded', name: 'The Gilded Charter', desc: 'Reach the highest renown tier.', check: function (st) { return (st.renown || 0) >= 400; } },
+    { id: 'deep_twelve', name: 'The Living Deep', desc: 'Reach depth 12, the Veins.', check: function (st) { return st.stats.deepest >= 12; } },
+    { id: 'auricle_down', name: 'Unlike Yourself', desc: 'Best the Auricle.', check: function (st) { return !!st.guardiansSlain.veins; } },
+    { id: 'the_heart', name: 'The Last Trade', desc: 'Reach the Heart of the Maw.', check: function (st) { return st.stats.deepest >= 13; } },
+    { id: 'heart_seal', name: 'What Is Sealed', desc: 'Seal the Heart.', check: null, event: true },
+    { id: 'heart_trade', name: 'Fair Terms', desc: 'Trade with the Heart.', check: null, event: true },
+    { id: 'heart_become', name: 'The Keeping', desc: 'Become the Heart.', check: null, event: true },
+    { id: 'all_endings', name: 'Every Answer', desc: 'Reach all three endings.', check: function (st) { return (st.endings || []).length >= 3; } }
   ];
 })();

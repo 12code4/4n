@@ -84,6 +84,14 @@
     var jbtn = document.getElementById('hud-journal');
     var unread = st.journalSeen.filter(function (p) { return st.journalRead.indexOf(p) < 0; }).length;
     jbtn.innerHTML = 'Journal' + (unread ? ' <span class="badge">' + unread + '</span>' : '');
+    // daily descent indicator
+    var dl = document.getElementById('hud-daily');
+    if (dl) {
+      if (st.daily && G.Daily) {
+        dl.classList.remove('hidden');
+        dl.innerHTML = '<b style="color:var(--brass-hi)">◆ Daily</b><span>' + G.Daily.daysLeft() + 'd · ' + G.U.fmt(G.Daily.score()) + 'pt</span>';
+      } else dl.classList.add('hidden');
+    }
   };
 
   /* ---------- screen manager ---------- */
@@ -92,6 +100,11 @@
     UI.screen = name;
     G.GFX.scene = (name === 'town' || name === 'outfit') ? 'town'
       : (name === 'combat' ? 'combat' : 'delve');
+    // biome drone follows the scene
+    if (G.Audio && G.Audio.setDrone) {
+      var ex = G.state && G.state.expedition;
+      G.Audio.setDrone(ex ? G.DATA.biomeForDepth(ex.depth).id : 'town');
+    }
   };
 
   /* master refresh: derive screen from state, render panel */
@@ -219,6 +232,7 @@
 
   /* return-from-expedition summary */
   G.on('returned', function (sum) {
+    if (sum && sum.ending) { UI.refresh(); return; } // the epilogue modal handles Heart endings
     setTimeout(function () {
       UI.modal(function (m) {
         if (sum.wiped) {

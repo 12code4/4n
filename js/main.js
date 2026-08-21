@@ -1,43 +1,47 @@
-/* Boot: load or new game, wire HUD, start the render loop. */
+/* Boot: title screen → game. Wires HUD, audio, and the render loop. */
 (function () {
   var G = (globalThis.G = globalThis.G || {});
+  var UI = G.UI;
 
   function boot() {
     G.GFX.init();
+    if (G.Audio) G.Audio.init();
 
-    var hadSave = G.loadSaved();
-    if (!hadSave) {
-      G.newGame();
-      G.save();
-    }
-
-    document.getElementById('hud').classList.remove('hidden');
+    // HUD wiring (buttons persist; panel/scene swap per screen)
     document.getElementById('hud-endday').addEventListener('click', function () {
       var r = G.Economy.endDay();
-      if (!r.ok) G.UI.toast(r.msg, 'bad');
-      G.UI.refresh();
+      if (!r.ok) UI.toast(r.msg, 'bad');
+      UI.refresh();
     });
-    document.getElementById('hud-journal').addEventListener('click', G.UI.showJournal);
-    document.getElementById('hud-ledger').addEventListener('click', G.UI.showLedger);
-    document.getElementById('hud-menu').addEventListener('click', G.UI.showMenu);
+    document.getElementById('hud-journal').addEventListener('click', UI.showJournal);
+    document.getElementById('hud-codex').addEventListener('click', UI.showCodex);
+    document.getElementById('hud-ledger').addEventListener('click', UI.showLedger);
+    document.getElementById('hud-menu').addEventListener('click', UI.showMenu);
+    var audioBtn = document.getElementById('hud-audio');
+    audioBtn.addEventListener('click', function () {
+      if (!G.Audio) return;
+      G.Audio.resume();
+      G.Audio.setOn(!G.Audio.on);
+      audioBtn.textContent = G.Audio.on ? '🔊' : '🔇';
+    });
+    if (G.Audio) audioBtn.textContent = G.Audio.on ? '🔊' : '🔇';
+
     document.getElementById('modal-wrap').addEventListener('click', function (ev) {
-      if (ev.target === ev.currentTarget && G.UI.modalDismiss) G.UI.closeModal();
+      if (ev.target === ev.currentTarget && UI.modalDismiss) UI.closeModal();
     });
     window.addEventListener('keydown', function (ev) {
-      if (ev.key === 'Escape' && G.UI.modalDismiss) G.UI.closeModal();
+      if (ev.key === 'Escape' && UI.modalDismiss) UI.closeModal();
     });
+    // first interaction resumes audio (browser autoplay policy)
+    window.addEventListener('pointerdown', function once() { if (G.Audio) G.Audio.resume(); window.removeEventListener('pointerdown', once); }, { once: true });
 
-    // refresh panel on any state-changing event
-    ['day', 'roster', 'market', 'buildings', 'supplies', 'journal'].forEach(function (evName) {
-      G.on(evName, function () { G.UI.updateHud(); });
+    ['day', 'roster', 'market', 'buildings', 'supplies', 'journal', 'renown', 'beasts', 'contracts', 'quests', 'mood'].forEach(function (evName) {
+      G.on(evName, function () { UI.updateHud(); });
     });
-    G.on('combatStart', function () { G.UI.refresh(); });
-    G.on('combatEnd', function () { G.UI.refresh(); });
+    G.on('combatStart', function () { UI.refresh(); });
+    G.on('combatEnd', function () { UI.refresh(); });
 
-    G.UI.refresh();
-    if (!hadSave) G.UI.showIntro();
-
-    // render loop
+    // render loop (always running; scene chosen by UI)
     var last = performance.now();
     function frame(now) {
       var dt = Math.min(0.05, (now - last) / 1000);
@@ -47,9 +51,20 @@
     }
     requestAnimationFrame(frame);
 
-    // autosave every 30s as backstop
-    setInterval(function () { G.save(); }, 30000);
+    // autosave backstop
+    setInterval(function () { if (G.state) G.save(); }, 30000);
+
+    // start at the title screen
+    UI.showTitle();
   }
+
+  /* enter the game proper (from title Continue/New/Daily) */
+  UI.boot2 = function () {
+    document.getElementById('hud').classList.remove('hidden');
+    document.getElementById('panel').classList.remove('hidden');
+    if (G.Audio) G.Audio.resume();
+    UI.refresh();
+  };
 
   if (typeof document !== 'undefined') {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

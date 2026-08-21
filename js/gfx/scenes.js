@@ -285,6 +285,31 @@
     windowLit(cx, x + w - 18, y - 24, 10, 12, t, 5);
   }
 
+  /* =================== TITLE =================== */
+  F.scenes.title = function (cx, W, H, t) {
+    // reuse the town vista, dimmed, with a big title-friendly sky
+    var sky = cx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, '#0a0b18'); sky.addColorStop(0.5, '#1c1428'); sky.addColorStop(0.82, '#3a2420'); sky.addColorStop(1, '#160d08');
+    cx.fillStyle = sky; cx.fillRect(0, 0, W, H);
+    for (var i = 0; i < 90; i++) {
+      var sx = (i * 149.3) % W, sy = ((i * 71.7) % (H * 0.55));
+      cx.globalAlpha = 0.2 + 0.5 * Math.abs(Math.sin(t * 0.6 + i));
+      cx.fillStyle = '#cdd3ff'; cx.fillRect(sx, sy, 1.6, 1.6);
+    }
+    cx.globalAlpha = 1;
+    // hills
+    cx.fillStyle = '#120e1e'; F.poly(cx, [[0, H * 0.66], [W * 0.3, H * 0.54], [W * 0.6, H * 0.64], [W, H * 0.56], [W, H], [0, H]]); cx.fill();
+    cx.fillStyle = '#0d0a16'; F.poly(cx, [[0, H * 0.74], [W * 0.4, H * 0.64], [W * 0.75, H * 0.72], [W, H * 0.66], [W, H], [0, H]]); cx.fill();
+    // the rift, centered, glowing gold
+    var mx = W * 0.5, gy = H * 0.72;
+    F.glow(cx, mx, gy + 20, 260, 'rgba(255,180,60,0.5)', 0.5 + 0.12 * Math.sin(t));
+    cx.fillStyle = '#050303';
+    F.poly(cx, [[mx - 130, H], [mx - 70, gy + 40], [mx - 24, gy], [mx + 20, gy + 30], [mx + 60, gy - 6], [mx + 110, gy + 44], [mx + 150, H]]); cx.fill();
+    cx.strokeStyle = 'rgba(255,200,90,0.8)'; cx.lineWidth = 2;
+    F.poly(cx, [[mx - 70, gy + 40], [mx - 24, gy], [mx + 20, gy + 30], [mx + 60, gy - 6], [mx + 110, gy + 44]], false); cx.stroke();
+    if (Math.random() < 0.4) F.spawn({ x: mx + (Math.random() - 0.5) * 120, y: gy + 30, vx: (Math.random() - 0.5) * 14, vy: -28 - Math.random() * 34, life: 3, size: 1.5 + Math.random() * 2, color: 'rgba(255,190,70,1)', grav: -6, fade: true, glow: true });
+  };
+
   /* =================== DELVE MAP =================== */
   F.mapLayout = function (W, H) {
     var ex = G.state.expedition;
@@ -502,6 +527,7 @@
       case 'librarian': return 58 * s + 10;
       case 'hound': return 14 + 12 * s;
       case 'auricle': return 52 * s + 12;
+      case 'heart': return 46 * s + 14;
       default: return 40;
     }
   }
@@ -751,6 +777,31 @@
           cx.quadraticCurveTo(x - 36 * S, y + (v2 * 8 - 12) * S, x - 44 * S, y + (v2 * 6) * S);
           cx.stroke();
         }
+        break;
+      }
+      case 'heart': {
+        // the Heart of the Maw: a great gold-white heart-of-account, beating slow,
+        // wreathed in rings of light like an ecliptic ledger
+        var beat = 1 + Math.pow(Math.max(0, Math.sin(t * 1.6)), 3) * 0.14;
+        F.glow(cx, x, y - 12 * S, 60 * S * beat, 'rgba(255,240,190,0.9)', 0.4 + 0.2 * beat);
+        // orbiting rings
+        cx.strokeStyle = 'rgba(255,225,150,0.35)'; cx.lineWidth = 1.5;
+        for (var rr = 0; rr < 3; rr++) {
+          cx.save(); cx.translate(x, y - 12 * S); cx.rotate(t * (0.2 + rr * 0.1) + rr);
+          cx.beginPath(); cx.ellipse(0, 0, (44 - rr * 8) * S, (20 - rr * 4) * S, 0, 0, Math.PI * 2); cx.stroke();
+          cx.restore();
+        }
+        // heart body (two lobes + point) in warm gold
+        cx.fillStyle = flash ? '#fff' : hsl(hue, 55, 55);
+        var hs = 26 * S * beat;
+        cx.beginPath();
+        cx.moveTo(x, y + hs * 0.9);
+        cx.bezierCurveTo(x - hs * 1.5, y - hs * 0.5, x - hs * 0.8, y - hs * 1.4, x, y - hs * 0.5);
+        cx.bezierCurveTo(x + hs * 0.8, y - hs * 1.4, x + hs * 1.5, y - hs * 0.5, x, y + hs * 0.9);
+        cx.fill();
+        // inner light
+        cx.fillStyle = flash ? '#fff' : hsl(hue + 10, 90, 82);
+        cx.beginPath(); cx.arc(x, y - 6 * S, 8 * S * beat, 0, Math.PI * 2); cx.fill();
         break;
       }
     }

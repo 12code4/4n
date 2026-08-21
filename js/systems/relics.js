@@ -13,6 +13,7 @@
     if (!G.DATA.relics[id]) return;
     if (st.relics.owned.indexOf(id) >= 0) return;
     st.relics.owned.push(id);
+    if (G.Codex) G.Codex.discover('relic', id);
     var r = G.DATA.relics[id];
     G.log('The company gains a relic: ' + r.name + '. ' + r.desc, 'story');
     G.emit('relic', r);
