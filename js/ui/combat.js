@@ -111,18 +111,21 @@
           act({ type: 'item', target: low.id });
         }
       }));
-      // v4: companion beast ability, once per fight
-      var bdef = G.Beasts && G.Beasts.activeDef();
-      if (bdef) {
+      // v4/v6: companion beast abilities — one button per beast on the run, cooldown-aware
+      var pack = G.Beasts ? G.Beasts.runList() : [];
+      pack.forEach(function (bdef) {
+        var ready = G.Combat.beastReady(bdef.id);
+        var cd = c.beastReady && c.beastReady[bdef.id];
+        var wait = (cd && cd < 9999) ? (cd - c.round) : null;
         acts.appendChild(h('button', {
-          disabled: c.beastUsed,
-          html: '🐾 <b>' + bdef.active.name + '</b><br><span class="sub">' + (c.beastUsed ? 'used' : bdef.name + ' — ' + UI.esc(bdef.active.desc)) + '</span>',
-          onclick: function () { act({ type: 'beast', target: UI.combatTarget }); }
+          disabled: !ready,
+          html: '🐾 <b>' + bdef.active.name + '</b><br><span class="sub">' + (ready ? bdef.name + ' — ' + UI.esc(bdef.active.desc) : (wait > 0 ? 'ready in ' + wait : 'spent')) + '</span>',
+          onclick: function () { act({ type: 'beast', beastId: bdef.id, target: UI.combatTarget }); }
         }));
-      }
+      });
       acts.appendChild(h('button.danger', {
         html: '🏃 <b>Flee</b><br><span class="sub">drop some loot; Scouts flee best</span>',
-        style: bdef ? '' : 'grid-column:1/3',
+        style: pack.length % 2 === 1 ? '' : 'grid-column:1/3',
         onclick: function () { act({ type: 'flee' }); }
       }));
       panel.appendChild(acts);

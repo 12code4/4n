@@ -40,7 +40,7 @@
 
   /* Retire: bank Legacy Marks, wipe the charter, start a fresh one that inherits
    * the legacy store (marks + already-bought perks). */
-  P.retire = function () {
+  P.retire = function (ascTier) {
     var earned = P.retireValue();
     var leg = G.state.legacy || { marks: 0, perks: [] };
     leg.marks = (leg.marks || 0) + earned;
@@ -48,8 +48,10 @@
     P.saveLegacy(leg);
     G.wipeSave();
     G.newGame(); // reads legacy back in (see state.js applyLegacy)
+    // v6: begin the new charter at a chosen Ascension tier
+    if (G.Ascension && ascTier) G.Ascension.setTier(ascTier);
     G.save();
-    G.log('The charter is retired. ' + earned + ' Legacy Marks banked. A new deed, a new Maw — and the old colours still fly.', 'story');
+    G.log('The charter is retired. ' + earned + ' Legacy Marks banked. A new deed, a new Maw — and the old colours still fly.' + (ascTier ? ' Ascension ' + G.Ascension.roman(ascTier) + '.' : ''), 'story');
     G.emit('prestige');
     return earned;
   };

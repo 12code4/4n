@@ -44,13 +44,13 @@
     if (!G.Beasts.owned().length) { panel.appendChild(h('p', { text: 'No beasts yet. Some deep events let you bring one home — if you have the room.' })); return; }
     G.Beasts.owned().forEach(function (id) {
       var bd = G.DATA.beasts[id];
-      var active = st.beasts.active === id;
-      var card = h('div.card' + (active ? '.selected' : ''));
-      card.appendChild(h('div.row', {}, [h('span.name', { text: bd.name }), h('span.sub', { text: active ? '◈ chosen' : '' })]));
+      var chosen = G.Beasts.isChosen(id);
+      var card = h('div.card' + (chosen ? '.selected' : ''));
+      card.appendChild(h('div.row', {}, [h('span.name', { text: bd.name }), h('span.sub', { text: chosen ? '◈ in the pack' : '' })]));
       card.appendChild(h('p.sub', { text: bd.desc, style: 'margin:3px 0' }));
       card.appendChild(h('p.sub', { html: '<b>Passive:</b> ' + passiveText(bd.passive) + ' · <b>' + bd.active.name + ':</b> ' + bd.active.desc }));
       var row = h('div.row', { style: 'gap:4px;justify-content:flex-start;margin-top:4px' });
-      row.appendChild(h('button.small' + (active ? '' : '.primary'), { text: active ? 'Chosen' : 'Choose', disabled: active, onclick: function () { G.Beasts.setActive(id); UI.refresh(); } }));
+      row.appendChild(h('button.small' + (chosen ? '' : '.primary'), { text: chosen ? 'In pack' : 'Add to pack', onclick: function () { G.Beasts.toggleChosen(id); UI.refresh(); } }));
       row.appendChild(h('button.small', { text: 'Release', onclick: function () { G.Beasts.release(id); UI.refresh(); } }));
       card.appendChild(row);
       panel.appendChild(card);
@@ -74,22 +74,53 @@
       h('div.row', {}, [h('span.name', { text: 'Legacy Marks' }), h('span.sub', { text: (leg.marks || 0) + ' banked · ' + (leg.charters || 0) + ' charters' })]),
       h('p.sub', { text: 'Retiring the charter banks Legacy Marks and starts a fresh company that inherits the store below — the colours outlive the ledger.' })
     ]));
+    // v6: Ascension ladder
+    if (G.Ascension) {
+      var cur = G.Ascension.tier(), allowed = G.Ascension.maxAllowed();
+      var card = h('div.card', { style: 'border-color:hsl(0,50%,45%)' });
+      card.appendChild(h('div.row', {}, [h('span.name', { text: 'Ascension' }), h('span.sub', { text: cur > 0 ? 'this charter: ' + G.Ascension.roman(cur) : 'standard charter' })]));
+      card.appendChild(h('p.sub', { text: 'Cleared up to Ascension ' + G.Ascension.roman(G.Ascension.maxCleared()) + '. Each renewal may climb one tier higher, stacking a harsh new rule for greater rewards.' }));
+      if (cur > 0) {
+        var mods = G.Ascension.activeMods();
+        card.appendChild(h('p.sub', { html: 'Active: ' + mods.map(function (m) { return '<span class="pill">' + G.Ascension.roman(m.t) + ' ' + UI.esc(m.add) + '</span>'; }).join(' ') }));
+      }
+      if (allowed >= 1) {
+        var next = allowed;
+        var nd = G.DATA.ascTier(next);
+        card.appendChild(h('p.sub', { html: '<b>Next available: Ascension ' + G.Ascension.roman(next) + ' — ' + nd.name + '.</b> ' + nd.add + (nd.relic ? ' Rewards a relic.' : '') }));
+      }
+      panel.appendChild(card);
+    }
     panel.appendChild(h('div.card', { style: 'border-color:var(--brass)' }, [
       h('p', { html: 'Retiring now would bank <b>' + G.Prestige.retireValue() + '</b> Legacy Marks.' }),
       h('button.danger', {
         text: 'Renew the Charter', style: 'width:100%',
-        onclick: function () {
-          UI.modal(function (m) {
-            m.appendChild(h('h2', { text: 'Renew the Charter?' }));
-            m.appendChild(h('p', { text: 'The company, roster, buildings and graves stay behind. You bank ' + G.Prestige.retireValue() + ' Legacy Marks and begin a fresh charter — keeping every Legacy perk you have bought.' }));
-            m.appendChild(h('div.btnrow', {}, [
-              h('button.danger', { text: 'Renew', onclick: function () { G.Prestige.retire(); UI.closeModal(); UI.townTab = 'company'; UI.refresh(); } }),
-              h('button', { text: 'Not yet', onclick: UI.closeModal })
-            ]));
-          });
-        }
+        onclick: function () { UI.showRenewModal(0); }
       })
     ]));
+    UI.showRenewModal = function (ascTier) {
+      var allowed = G.Ascension ? G.Ascension.maxAllowed() : 0;
+      UI.modal(function (m) {
+        m.appendChild(h('h2', { text: 'Renew the Charter?' }));
+        m.appendChild(h('p', { text: 'The company, roster, buildings and graves stay behind. You bank ' + G.Prestige.retireValue() + ' Legacy Marks and begin a fresh charter — keeping every Legacy perk you have bought.' }));
+        if (G.Ascension && allowed >= 1) {
+          m.appendChild(h('h3', { text: 'Ascension' }));
+          var row = h('div.row', { style: 'gap:4px;justify-content:flex-start;flex-wrap:wrap' });
+          for (var t = 0; t <= allowed; t++) {
+            (function (tt) {
+              row.appendChild(h('button' + (ascTier === tt ? '.primary' : ''), { text: tt === 0 ? 'Standard' : G.Ascension.roman(tt), onclick: function () { UI.showRenewModal(tt); } }));
+            })(t);
+          }
+          m.appendChild(row);
+          if (ascTier > 0) { var nd = G.DATA.ascTier(ascTier); m.appendChild(h('p.sub', { html: '<b>' + nd.name + ':</b> every rule up to ' + G.Ascension.roman(ascTier) + ' stacks. Hardest new rule: ' + nd.add })); }
+        }
+        m.appendChild(h('div.btnrow', {}, [
+          h('button.danger', { text: 'Renew' + (ascTier ? ' at Ascension ' + G.Ascension.roman(ascTier) : ''), onclick: function () { G.Prestige.retire(ascTier); UI.closeModal(); UI.townTab = 'company'; UI.screen = 'town'; UI.refresh(); } }),
+          h('button', { text: 'Not yet', onclick: UI.closeModal })
+        ]));
+      });
+    };
+
     panel.appendChild(h('h3', { text: 'Legacy Perks (permanent)' }));
     G.DATA.legacyPerks.forEach(function (p) {
       var owned = G.Prestige.hasPerk(p.id);

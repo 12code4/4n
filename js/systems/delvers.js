@@ -59,6 +59,8 @@
     var mult = 1;
     if (G.Renown && G.Renown.hasPerk('hire10')) mult *= 0.9;     // renown discount
     if (G.Relics) mult *= G.Relics.mult('hireMult');             // relic cost modifier
+    if (G.Ascension) mult *= G.Ascension.hireMult();             // ascension surcharge
+    if (G.Seasons) mult *= (1 - G.Seasons.hireDiscount());       // Thaw brings delvers cheap
     return Math.max(1, Math.round(base * mult));
   };
 
@@ -90,6 +92,7 @@
     d.hiredDay = st.day;
     D.addToRoster(d);
     G.log(d.name + ' signs on. (' + G.DATA.classes[d.cls].name + ', ' + cost + 'ᵯ)', 'good');
+    if (G.Hints) G.Hints.fire('firstHire');
     G.emit('roster');
     return { ok: true };
   };
@@ -170,6 +173,7 @@
       G.log('The bone-chapel bells ring for ' + d.name + '. Their lessons return as renown (+' + back + ').', 'story');
     }
     G.log(d.name + ' is dead. ' + (cause ? '(' + cause + ')' : ''), 'bad');
+    if (G.Hints) G.Hints.fire('firstDeath');
     if (G.Achieve) G.Achieve.check();
     G.emit('death', d);
   };

@@ -11,7 +11,7 @@
       _rng: null,
       day: 1,
       marks: G.BAL.startMarks,
-      buildings: { storehouse: 1, tavern: 0, assay: 0, infirmary: 0, forge: 0, contracts: 0, charterhall: 0 },
+      buildings: { storehouse: 1, tavern: 0, assay: 0, infirmary: 0, forge: 0, contracts: 0, charterhall: 0, menagerie: 0, cartographer: 0, countinghouse: 0 },
       delvers: [],
       nextDelverN: 1,
       tavernPool: [],
@@ -32,12 +32,16 @@
       claims: {},                          // v3 biomeId -> owner
       mood: null,                          // v4 the Maw's mood
       omenOffer: null, omenChosen: [],     // v4 per-outfitting omen choice
-      beasts: { owned: [], active: null }, // v4 companion beasts
+      beasts: { owned: [], chosen: [] },   // v4/v6 companion beasts (v6: multi-select pack)
       legacy: { marks: 0, perks: [] },     // v4 prestige (overwritten by applyLegacy)
       codex: { enemy: {}, material: {}, relic: {}, mood: {}, biome: {}, ending: {}, beast: {} }, // v5
       endings: [],                         // v5 endings reached
       heartOutcome: null, heartSealed: false, // v5
       daily: null,                         // v5 daily descent state
+      ascension: 0, ascMax: 0,             // v6 ascension ladder
+      festival: null, _lastSeason: 0,      // v6 seasons/festivals
+      loan: null,                          // v6 countinghouse loan
+      hints: {},                           // v6 onboarding
       unlockedStart: 1,                    // deepest depth an expedition may START at
       guardiansSlain: {},                  // biomeId -> true
       expedition: null,
@@ -78,6 +82,7 @@
     if (!G.Prestige) { st.legacy = st.legacy || { marks: 0, perks: [] }; return; }
     var leg = G.Prestige.loadLegacy();
     st.legacy = { marks: leg.marks || 0, perks: (leg.perks || []).slice(), charters: leg.charters || 0 };
+    st.ascMax = leg.ascMax || 0; // the Ascension ladder carries across charters
     var fx = function (k) { return G.Prestige.fx(k); };
     // startMarks
     var sm = fx('startMarks'); if (sm) st.marks += sm;

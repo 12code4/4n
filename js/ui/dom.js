@@ -43,6 +43,17 @@
   G.on('log', function (d) { UI.toast(d.m, d.k); });
   G.on('elog', function (d) { UI.toast(d.m, d.k); });
 
+  /* v6: onboarding hints as a one-time dismissible card */
+  G.on('hint', function (d) {
+    setTimeout(function () {
+      UI.modal(function (m) {
+        m.appendChild(h('h2', { text: '💡 A word of advice' }));
+        m.appendChild(h('p', { text: d.text }));
+        m.appendChild(h('div.btnrow', {}, [h('button.primary', { text: 'Got it', onclick: UI.closeModal })]));
+      });
+    }, 120);
+  });
+
   /* ---------- modal ---------- */
   UI.modal = function (build, opts) {
     opts = opts || {};
@@ -79,6 +90,20 @@
       var mood = G.Moods.current();
       mEl.innerHTML = '<b style="color:hsl(' + mood.hue + ',70%,65%)">' + mood.glyph + '</b><span>' + mood.name + '</span>';
       mEl.title = mood.blurb + (G.Moods.daysLeft() ? ' (' + G.Moods.daysLeft() + 'd)' : '');
+    }
+    // season (and festival) indicator
+    var sEl = document.getElementById('hud-season');
+    if (sEl && G.Seasons) {
+      var seas = G.Seasons.def(), fest = G.Seasons.festival();
+      sEl.innerHTML = '<b style="color:hsl(' + seas.hue + ',55%,62%)">' + (fest ? '✦' : '❃') + '</b><span>' + (fest ? fest.name : seas.name) + '</span>';
+      sEl.title = fest ? fest.blurb : (seas.name + ' — ' + seas.blurb);
+    }
+    // ascension badge
+    var aEl = document.getElementById('hud-asc');
+    if (aEl && G.Ascension) {
+      var at = G.Ascension.tier();
+      if (at > 0) { aEl.classList.remove('hidden'); aEl.innerHTML = '<b style="color:hsl(0,60%,62%)">A' + G.Ascension.roman(at) + '</b>'; aEl.title = 'Ascension ' + G.Ascension.roman(at); }
+      else aEl.classList.add('hidden');
     }
     document.getElementById('hud-endday').classList.toggle('hidden', !!ex);
     var jbtn = document.getElementById('hud-journal');

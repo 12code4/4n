@@ -20,6 +20,7 @@
   function omenFlag(k) { return G.Omens ? G.Omens.flag(k) : false; }
   function moodEnemy() { return G.Moods ? G.Moods.fx('enemy', 1) : 1; }
   function beastPassive(k, base) { return G.Beasts ? G.Beasts.passive(k, base) : base; }
+  function wildFury() { var c = C.cur(); return (c && c.wildFuryRound === c.round) ? 2 : 0; }
   function healScale() { return omenMult('healBonus') * (G.Beasts ? G.Beasts.passive('heal', 1) : 1); }
 
   /* ---------- status effects (v4.0) ---------- */
@@ -69,11 +70,13 @@
     var s = C.scale(depth);
     var enemies = groupIds.map(function (id, i) {
       var def = G.DATA.enemies[id];
-      // mood + omen enemy scaling (the Living Maw makes the deep meaner or milder)
-      var eScale = (def.boss ? 1 : s) * moodEnemy() * omenMult('enemyHp');
+      // mood + omen + ascension enemy scaling (the Living Maw, meaner or milder)
+      var ascHp = G.Ascension ? G.Ascension.enemyHp() : 1;
+      var ascBoss = (def.boss && G.Ascension) ? G.Ascension.guardianHp() : 1;
+      var eScale = (def.boss ? 1 : s) * moodEnemy() * omenMult('enemyHp') * ascHp * ascBoss;
       var hp = Math.max(1, Math.round(def.hp * eScale));
       var relSpd = relAdd('enemySpd');
-      var dmgBonus = omenAdd('enemyDmg');
+      var dmgBonus = omenAdd('enemyDmg') + (G.Ascension ? G.Ascension.enemyDmg() : 0);
       return {
         uid: 'e' + i + '_' + id, id: id, name: def.name,
         hp: hp, maxHp: hp,
@@ -85,8 +88,7 @@
       };
     });
     ex.mode = 'combat';
-    // lock in the expedition's chosen beast for the whole run
-    if (ex.beast === undefined) ex.beast = (G.state.beasts && G.state.beasts.active) || null;
+    // the run's companion pack is locked at launch (ex.beasts); nothing to do here
     // starting grit: base + best gritStart trinket + still_point talent + relic bell + omen + beast
     var startGrit = G.BAL.gritStart + relAdd('gritStart') + omenAdd('gritStart') + beastPassive('grit', 0);
     G.Exp.team().forEach(function (d) {
@@ -100,7 +102,7 @@
       brawl: !!opts.brawl, rivalId: opts.rivalId || null,
       guarding: {}, taunt: {}, shaken: {}, fledFail: false,
       reforged: 0, downed: {}, vanished: {}, revivified: false, unbroken: {},
-      dstat: {}, skipNext: {}, actionCounts: {}, beastUsed: false, echoAcc: 0
+      dstat: {}, skipNext: {}, actionCounts: {}, beastReady: {}, echoAcc: 0
     };
     // omen of the ward: the team begins each fight warded against the first blow
     if (omenFlag('wardStart')) G.Exp.team().forEach(function (d) { C.applyStatus(d.id, 'ward', true); });
@@ -123,6 +125,7 @@
     if (G.Codex) enemies.forEach(function (e) { G.Codex.discover('enemy', e.id); });
     var names = enemies.map(function (e) { return e.name; }).join(', ');
     G.Exp.elog('Ambush! ' + names + '!', 'bad');
+    if (G.Hints) G.Hints.fire('firstCombat');
     C.newRound();
     C.advance();
     G.emit('combatStart');
@@ -215,7 +218,7 @@
       case 'strike': {
         var e = C.enemyByUid(action.target) || C.firstLivingEnemy();
         if (!e) break;
-        var dmg = C.eff(d, 'might') + gAtk(d) + beastPassive('dmg', 0) + G.rint(0, 3);
+        var dmg = C.eff(d, 'might') + gAtk(d) + beastPassive('dmg', 0) + wildFury() + G.rint(0, 3);
         dmg = Math.round(dmg * C.curseMult() * selfChillMult(d) * (talent(d, 'first_blood') && c.round === 1 ? 1.5 : 1));
         var critP = G.BAL.critBase + d.stats.luck * G.BAL.critPerLuck + gFx(d, 'crit');
         var crit = G.rchance(critP);
@@ -285,15 +288,37 @@
         break;
       }
       case 'beast': {
-        var bdef = G.Beasts && G.Beasts.activeDef();
-        if (!bdef || c.beastUsed) { c.awaiting = d.id; return { ok: false, msg: 'The beast has nothing left this fight.' }; }
-        c.beastUsed = true;
-        C.beastAbility(bdef, action.target);
+        var bid = action.beastId || (G.Beasts.runList()[0] && G.Beasts.runList()[0].id);
+        if (!bid || !C.beastReady(bid)) { c.awaiting = d.id; return { ok: false, msg: 'That beast is not ready yet.' }; }
+        C.useBeast(bid);
         break; // the beast acts on the delver's turn; the delver still passes
       }
     }
     if (!C.checkEnd()) C.advance();
     return { ok: true };
+  };
+
+  /* is a beast's active ability available this round? */
+  C.beastReady = function (bid) {
+    var c = C.cur();
+    if (!c.beastReady) c.beastReady = {};
+    return (c.beastReady[bid] || 0) <= c.round;
+  };
+  C.useBeast = function (bid) {
+    var c = C.cur();
+    var bdef = G.DATA.beasts[bid];
+    if (!bdef) return;
+    C.beastAbility(bdef);
+    // cooldown: normally once per fight; the Warden's bond recharges it
+    var warden = G.Beasts.wardenBond();
+    if (warden) {
+      var cd = 3 - (G.Exp.team().some(function (x) { return talent(x, 'two_as_one'); }) ? 1 : 0);
+      c.beastReady[bid] = c.round + cd;
+    } else {
+      c.beastReady[bid] = 9999; // spent for the fight
+    }
+    // Wild Fury: a party-wide damage bump the round a beast acts
+    if (G.Exp.team().some(function (x) { return talent(x, 'wild_fury'); })) c.wildFuryRound = c.round;
   };
 
   C.beastAbility = function (bdef, targetUid) {
@@ -337,6 +362,17 @@
 
   C.useSkill = function (d, skill, targetUid) {
     var c = C.cur();
+    if (skill.kind === 'command') {
+      // Warden's Call of the Pack: every companion beast acts now (ignoring cooldown), Warden warded
+      var list = G.Beasts.runList();
+      if (!list.length) { G.Exp.elog(d.name + ' calls, but no beast answers.', 'info'); }
+      list.forEach(function (b) { C.beastAbility(b, targetUid); c.beastReady[b.id] = c.round; }); // refreshed, ready again
+      C.applyStatus(d.id, 'ward', true);
+      // Houndmaster: the call also strikes
+      if (talent(d, 'houndmaster')) { var e = C.enemyByUid(targetUid) || C.firstLivingEnemy(); if (e) C.damageEnemy(e, C.eff(d, 'might'), d, false, 'Call'); }
+      G.Exp.elog(d.name + ' calls the pack to the attack.', 'good');
+      return;
+    }
     if (skill.kind === 'heal') {
       var amt = skill.power(d) + (talent(d, 'stronger_brew') ? 3 : 0);
       if (talent(d, 'great_tonic')) amt = Math.round(amt * 1.5);
@@ -379,7 +415,7 @@
     }
     var empower = (talent(d, 'empower') ? 1.4 : 1) * selfChillMult(d);
     if (skill.target === 'allEnemies') {
-      var base = Math.round((skill.power(d) + gAtk(d) + beastPassive('dmg', 0) + (talent(d, 'wide_lance') ? 2 : 0)) * empower * C.curseMult());
+      var base = Math.round((skill.power(d) + gAtk(d) + beastPassive('dmg', 0) + wildFury() + (talent(d, 'wide_lance') ? 2 : 0)) * empower * C.curseMult());
       var living = c.enemies.filter(function (e) { return e.hp > 0; });
       var hitCount = living.length;
       living.forEach(function (e) {
@@ -390,7 +426,7 @@
     } else {
       var e = C.enemyByUid(targetUid) || C.firstLivingEnemy();
       if (!e) return;
-      var dmg = Math.round((skill.power(d) + gAtk(d) + beastPassive('dmg', 0) + G.rint(0, 3)) * empower * C.curseMult());
+      var dmg = Math.round((skill.power(d) + gAtk(d) + beastPassive('dmg', 0) + wildFury() + G.rint(0, 3)) * empower * C.curseMult());
       var critP = G.BAL.critBase + d.stats.luck * G.BAL.critPerLuck + (skill.critBonus || 0) + gFx(d, 'crit');
       var crit = G.rchance(critP);
       if (crit) dmg = Math.round(dmg * (talent(d, 'assassinate') ? 2.25 : G.BAL.critMult));

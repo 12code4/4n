@@ -98,7 +98,7 @@
     panel.appendChild(h('h3', { text: 'Supplies' }));
     var s = st.supplies;
     ['rations', 'torches', 'bandages'].forEach(function (k) {
-      var cost = G.BAL.supplyCost[k];
+      var cost = G.Economy.supplyUnit(k);
       panel.appendChild(h('div.card', {}, [
         h('div.row', {}, [
           h('span', { text: G.U.cap(k) + ': ' + s[k] }),
@@ -192,6 +192,27 @@
     var totVal = 0;
     for (var id in inv) totVal += G.Economy.price(id) * inv[id];
     panel.appendChild(h('p', { html: 'Stock value at market: <b>' + G.U.fmt(totVal) + 'ᵯ</b>' }));
+
+    // v6: the Countinghouse — interest & loans
+    if (G.bld('countinghouse')) {
+      panel.appendChild(h('h3', { text: 'The Countinghouse' }));
+      panel.appendChild(h('p.sub', { text: 'Banked marks earn ' + Math.round(G.Finance.rate() * 100) + '%/day. Loans up to ' + G.Finance.loanCap() + 'ᵯ.' }));
+      if (st.loan) {
+        var due = st.loan.dueDay - st.day;
+        panel.appendChild(h('div.card', {}, [
+          h('div.row', {}, [h('span.name', { text: 'Outstanding loan' }), h('span.sub', { html: due <= 1 ? '<span class="down">due ' + (due <= 0 ? 'today' : 'tomorrow') + '</span>' : 'due in ' + due + 'd' })]),
+          h('p.sub', { html: 'Owe <b>' + st.loan.owed + 'ᵯ</b>' }),
+          h('button.small.primary', { text: 'Repay now', disabled: st.marks < st.loan.owed, onclick: function () { var r = G.Finance.repayLoan(); if (!r.ok) UI.toast(r.msg, 'bad'); UI.refresh(); } })
+        ]));
+      } else {
+        var lrow = h('div.row', { style: 'gap:4px;justify-content:flex-start;flex-wrap:wrap' });
+        [50, 100, G.Finance.loanCap()].filter(function (v, i, a) { return v <= G.Finance.loanCap() && a.indexOf(v) === i; }).forEach(function (amt) {
+          lrow.appendChild(h('button.small', { text: 'Borrow ' + amt + 'ᵯ', onclick: function () { var r = G.Finance.takeLoan(amt); if (!r.ok) UI.toast(r.msg, 'bad'); UI.refresh(); } }));
+        });
+        panel.appendChild(lrow);
+        panel.appendChild(h('p.sub', { text: 'Repay 20% over principal within 8 days, or the clerk seizes marks and your renown suffers.', style: 'margin-top:4px' }));
+      }
+    }
   }
 
   /* ================= BUILD ================= */
@@ -276,7 +297,7 @@
     var buyRow = h('div.row', { style: 'gap:4px;justify-content:flex-start;flex-wrap:wrap' });
     ['torches', 'rations', 'bandages'].forEach(function (k) {
       buyRow.appendChild(h('button.small', {
-        text: '+1 ' + k.slice(0, -1) + ' (' + G.BAL.supplyCost[k] + 'ᵯ)',
+        text: '+1 ' + k.slice(0, -1) + ' (' + G.Economy.supplyUnit(k) + 'ᵯ)',
         onclick: function () { var r = G.Economy.buySupply(k, 1); if (!r.ok) UI.toast(r.msg, 'bad'); UI.refresh(); }
       }));
     });
@@ -289,14 +310,23 @@
       panel.appendChild(h('div.bark', { html: '<b>The Maw is ' + mood.name + '.</b> ' + UI.esc(mood.blurb) }));
     }
 
-    // v4: companion beast for the run
+    // v4/v6: companion beast(s) for the run — a Warden on the team unlocks extra slots
     if (G.bld('menagerie') && G.Beasts.owned().length) {
-      panel.appendChild(h('h3', { text: 'Companion' }));
+      var slots = G.Beasts.slots(UI.sel.team.map(G.Delvers.get).filter(Boolean));
+      var chosenN = G.Beasts.chosen().length;
+      panel.appendChild(h('h3', { text: 'Companions (' + Math.min(chosenN, slots) + '/' + slots + ')' }));
+      if (slots > 1) panel.appendChild(h('p.sub', { text: 'A Warden’s bond lets ' + slots + ' beasts ride along.', style: 'margin-bottom:4px' }));
       var brow = h('div.row', { style: 'gap:4px;justify-content:flex-start;flex-wrap:wrap' });
-      brow.appendChild(h('button' + (!st.beasts.active ? '.primary' : ''), { text: 'None', onclick: function () { G.Beasts.setActive(null); UI.refresh(); } }));
       G.Beasts.owned().forEach(function (id) {
         var bd = G.DATA.beasts[id];
-        brow.appendChild(h('button' + (st.beasts.active === id ? '.primary' : ''), { title: bd.desc + ' — ' + bd.active.desc, text: bd.name, onclick: function () { G.Beasts.setActive(id); UI.refresh(); } }));
+        var on = G.Beasts.isChosen(id);
+        var order = G.Beasts.chosen().indexOf(id);
+        var willRide = on && order < slots;
+        brow.appendChild(h('button' + (willRide ? '.primary' : ''), {
+          title: bd.desc + ' — ' + bd.active.desc,
+          text: (on && order >= slots ? '(bench) ' : '') + bd.name,
+          onclick: function () { G.Beasts.toggleChosen(id); UI.refresh(); }
+        }));
       });
       panel.appendChild(brow);
     }

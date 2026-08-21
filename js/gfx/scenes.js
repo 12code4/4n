@@ -10,29 +10,45 @@
   F.uW = function () { return F.W > 720 ? F.W - 430 : F.W; };
 
   /* =================== TOWN =================== */
+  function hx2rgb(h) { h = h.replace('#', ''); return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]; }
+  function mix(a, b, m) { return 'rgb(' + Math.round(a[0] + (b[0] - a[0]) * m) + ',' + Math.round(a[1] + (b[1] - a[1]) * m) + ',' + Math.round(a[2] + (b[2] - a[2]) * m) + ')'; }
+
   F.scenes.town = function (cx, W, H, t) {
+    // v6: the season tints the sky, and a slow cycle breathes from deep night to pre-dawn
+    var seas = (G.Seasons && G.state) ? G.Seasons.def() : null;
+    var topRGB = hx2rgb(seas ? seas.sky[0] : '#141826');
+    var midRGB = hx2rgb(seas ? seas.sky[1] : '#241a2e');
+    var seasHue = seas ? seas.hue : 210;
+    var night = 0.5 + 0.5 * Math.sin(t * 0.045); // 0 = deep night, 1 = toward dawn
+    F.townNight = night;
     // sky
     var sky = cx.createLinearGradient(0, 0, 0, H);
-    sky.addColorStop(0, '#0d0f1e');
-    sky.addColorStop(0.55, '#241a2e');
-    sky.addColorStop(0.8, '#4a2c25');
+    sky.addColorStop(0, mix([7, 8, 18], topRGB, 0.3 + 0.45 * night));
+    sky.addColorStop(0.55, mix([18, 12, 22], midRGB, 0.35 + 0.4 * night));
+    sky.addColorStop(0.8, mix([42, 30, 34], [90, 52, 40], night));
     sky.addColorStop(1, '#1c120c');
     cx.fillStyle = sky;
     cx.fillRect(0, 0, W, H);
 
-    // stars
+    // pre-dawn warmth gathering on the eastern horizon as the cycle turns
+    if (night > 0.4) {
+      F.glow(cx, W * 0.9, H * 0.66, 260 * night, 'hsla(' + (seasHue - 180 + 360) % 360 + ',70%,55%,0.14)', (night - 0.4) * 0.5);
+    }
+
+    // stars (dimming as dawn approaches)
     cx.save();
+    var starA = 0.9 - 0.7 * night;
     for (var i = 0; i < 60; i++) {
       var sx = (i * 137.5) % W, sy = ((i * 89.3) % (H * 0.45));
       var tw = 0.4 + 0.6 * Math.abs(Math.sin(t * 0.8 + i));
-      cx.globalAlpha = 0.25 + 0.4 * tw;
+      cx.globalAlpha = (0.25 + 0.4 * tw) * starA;
       cx.fillStyle = '#cdd3ff';
       cx.fillRect(sx, sy, 1.6, 1.6);
     }
     cx.restore();
 
-    // moon
-    F.glow(cx, W * 0.16, H * 0.18, 90, 'rgba(220,215,255,0.55)', 0.5);
+    // moon — its halo takes a faint seasonal tint
+    F.glow(cx, W * 0.16, H * 0.18, 90, 'hsla(' + seasHue + ',40%,80%,0.5)', 0.5);
     cx.fillStyle = '#d8d4e8';
     cx.beginPath(); cx.arc(W * 0.16, H * 0.18, 26, 0, Math.PI * 2); cx.fill();
     cx.fillStyle = '#b9b4cf';
@@ -86,14 +102,16 @@
     var st = G.state;
     if (st) {
       var by = H * 0.8, U = F.uW();
-      drawStorehouse(cx, U * 0.02, by, st.buildings.storehouse, t);
-      drawTavern(cx, U * 0.16, by, st.buildings.tavern, t);
-      drawAssay(cx, U * 0.30, by, st.buildings.assay, t);
-      drawInfirmary(cx, U * 0.41, by, st.buildings.infirmary, t);
-      if (st.buildings.forge) drawForge(cx, U * 0.52, by, st.buildings.forge, t);
-      if (st.buildings.contracts) drawContractsBoard(cx, U * 0.64, by, st.buildings.contracts, t);
-      if (st.buildings.menagerie) drawMenagerie(cx, U * 0.75, by, st.buildings.menagerie, t);
-      if (st.buildings.charterhall) drawCharterHall(cx, U * 0.87, by, st.buildings.charterhall, t);
+      drawStorehouse(cx, U * 0.01, by, st.buildings.storehouse, t);
+      drawTavern(cx, U * 0.12, by, st.buildings.tavern, t);
+      drawAssay(cx, U * 0.23, by, st.buildings.assay, t);
+      drawInfirmary(cx, U * 0.32, by, st.buildings.infirmary, t);
+      if (st.buildings.forge) drawForge(cx, U * 0.41, by, st.buildings.forge, t);
+      if (st.buildings.contracts) drawContractsBoard(cx, U * 0.50, by, st.buildings.contracts, t);
+      if (st.buildings.cartographer) drawCartographer(cx, U * 0.59, by, st.buildings.cartographer, t);
+      if (st.buildings.countinghouse) drawCountinghouse(cx, U * 0.68, by, st.buildings.countinghouse, t);
+      if (st.buildings.menagerie) drawMenagerie(cx, U * 0.77, by, st.buildings.menagerie, t);
+      if (st.buildings.charterhall) drawCharterHall(cx, U * 0.88, by, st.buildings.charterhall, t);
     }
 
     // fog band
@@ -102,7 +120,42 @@
     cx.fillStyle = '#c9a468';
     cx.fillRect(0, H * 0.74, W, H * 0.06);
     cx.restore();
+
+    // v6: a festival strings lanterns across the town and dusts the air with light
+    if (st && G.Seasons && G.Seasons.festival()) drawFestival(cx, W, H, t, G.Seasons.festival());
   };
+
+  /* a swaying garland of lanterns overhead + drifting motes when a festival is on */
+  function drawFestival(cx, W, H, t, fest) {
+    var hue = fest.id === 'founders' ? 44 : fest.id === 'belltoll' ? 210 : 30;
+    var y0 = H * 0.34, span = W, n = Math.max(6, Math.floor(W / 90));
+    cx.save();
+    // the cord, hung in a shallow catenary
+    cx.strokeStyle = 'rgba(60,44,28,0.8)'; cx.lineWidth = 1.5;
+    cx.beginPath();
+    for (var s = 0; s <= n; s++) {
+      var px = (s / n) * span;
+      var py = y0 + Math.sin(s / n * Math.PI) * 26 + Math.sin(t * 0.8 + s) * 2;
+      if (s === 0) cx.moveTo(px, py); else cx.lineTo(px, py);
+    }
+    cx.stroke();
+    // lanterns
+    for (var l = 0; l < n; l++) {
+      var lx = ((l + 0.5) / n) * span;
+      var ly = y0 + Math.sin((l + 0.5) / n * Math.PI) * 26 + 8 + Math.sin(t * 0.8 + l) * 2;
+      var lh = (hue + l * 12) % 360;
+      F.glow(cx, lx, ly, 16, F.hsl(lh, 85, 60, 1), 0.5 + 0.2 * Math.sin(t * 2 + l));
+      cx.fillStyle = F.hsl(lh, 70, 55, 1);
+      F.rr(cx, lx - 4, ly - 5, 8, 11, 3); cx.fill();
+      cx.fillStyle = 'rgba(255,240,200,0.9)';
+      cx.fillRect(lx - 1.4, ly - 3, 2.8, 6);
+    }
+    cx.restore();
+    // occasional drifting mote of festival light
+    if (Math.random() < 0.2) {
+      F.spawn({ x: Math.random() * W, y: H * 0.4 + Math.random() * H * 0.3, vx: (Math.random() - 0.5) * 8, vy: -6 - Math.random() * 8, life: 3, size: 1.2 + Math.random() * 1.6, color: F.hsl(hue, 85, 65, 1), grav: -2, fade: true, glow: true });
+    }
+  }
 
   function ghost(cx, x, y, w, h, label) {
     cx.save();
@@ -283,6 +336,60 @@
     cx.restore();
     windowLit(cx, x + 8, y - 24, 10, 12, t, 3);
     windowLit(cx, x + w - 18, y - 24, 10, 12, t, 5);
+  }
+  function drawCartographer(cx, x, y, lvl, t) {
+    var w = 64 + lvl * 8, h = 46 + lvl * 6;
+    // a low surveyor's hall
+    cx.fillStyle = '#22303a';
+    cx.fillRect(x, y - h, w, h);
+    // shallow hip roof
+    cx.fillStyle = '#2c4150';
+    F.poly(cx, [[x - 5, y - h], [x + w / 2, y - h - 16], [x + w + 5, y - h]]); cx.fill();
+    // a great chart unrolled on the facade, its inked routes glinting
+    cx.fillStyle = '#d8cba8';
+    F.rr(cx, x + 8, y - h + 14, w - 16, h - 22, 2); cx.fill();
+    cx.strokeStyle = 'rgba(90,60,30,0.7)'; cx.lineWidth = 1;
+    cx.beginPath();
+    cx.moveTo(x + 12, y - 10); cx.lineTo(x + 20, y - 24); cx.lineTo(x + w * 0.5, y - 18); cx.lineTo(x + w - 14, y - 28);
+    cx.stroke();
+    // survey dividers propped against it
+    cx.strokeStyle = '#8a7a5a'; cx.lineWidth = 2;
+    var dvx = x + w - 16, dvy = y - 8;
+    cx.beginPath(); cx.moveTo(dvx, dvy); cx.lineTo(dvx - 6, dvy - 16); cx.moveTo(dvx, dvy); cx.lineTo(dvx + 5, dvy - 16); cx.stroke();
+    // a small rooftop scope sweeps the dark, brighter as the Table grows
+    if (lvl >= 2) {
+      cx.save(); cx.translate(x + w * 0.5, y - h - 12); cx.rotate(-0.5 + Math.sin(t * 0.6) * 0.35);
+      cx.strokeStyle = '#6b5a3a'; cx.lineWidth = 3; cx.beginPath(); cx.moveTo(0, 0); cx.lineTo(16, -4); cx.stroke();
+      F.glow(cx, 16, -4, 7, 'rgba(150,220,255,0.7)', 0.5); cx.restore();
+    }
+    windowLit(cx, x + 6, y - 14, 8, 9, t, 2);
+  }
+  function drawCountinghouse(cx, x, y, lvl, t) {
+    var w = 58 + lvl * 8, h = 54 + lvl * 8;
+    // a narrow stronghouse of dressed stone
+    cx.fillStyle = '#2a2620';
+    cx.fillRect(x, y - h, w, h);
+    cx.strokeStyle = '#1a1712'; cx.lineWidth = 1;
+    for (var b = 1; b < 4; b++) cx.strokeRect(x, y - h + b * h / 4, w, 0.01); // course lines
+    // flat parapet with merlons
+    cx.fillStyle = '#3a352b';
+    for (var m = 0; m < 4; m++) cx.fillRect(x + m * w / 4, y - h - 6, w / 4 - 4, 6);
+    // the iron-bound vault door
+    cx.fillStyle = '#171410';
+    F.rr(cx, x + w / 2 - 9, y - 22, 18, 22, 2); cx.fill();
+    cx.strokeStyle = '#5a4a2a'; cx.lineWidth = 1.5; cx.strokeRect(x + w / 2 - 9, y - 22, 18, 22);
+    // a stack of coins catching the lamplight, taller with each level
+    var cxk = x + 10, stack = 2 + lvl;
+    for (var ci = 0; ci < stack; ci++) {
+      cx.fillStyle = ci % 2 ? '#c9a468' : '#b8934f';
+      F.rr(cx, cxk, y - 6 - ci * 4, 12, 3.4, 1.5); cx.fill();
+    }
+    F.glow(cx, cxk + 6, y - 6 - stack * 4, 8, 'rgba(255,210,110,0.6)', 0.4 + 0.15 * Math.sin(t * 2));
+    // a coin-mark lit over the door
+    cx.fillStyle = 'rgba(255,205,120,' + (0.7 + 0.2 * Math.sin(t * 1.6)) + ')';
+    cx.beginPath(); cx.arc(x + w / 2, y - h + 12, 5, 0, Math.PI * 2); cx.fill();
+    cx.fillStyle = '#2a2620'; cx.font = '7px Georgia, serif'; cx.textAlign = 'center';
+    cx.fillText('ᵯ', x + w / 2, y - h + 14.5);
   }
 
   /* =================== TITLE =================== */
@@ -593,6 +700,27 @@
       F.glow(cx, fx0, fy0 + 2, 9, hsl(hue, 85, 60), 0.6);
       cx.fillStyle = flash ? '#fff' : hsl(hue, 70, 62);
       cx.beginPath(); cx.arc(fx0, fy0 + 1, 2.4, 0, Math.PI * 2); cx.fill(); // brew
+    } else if (d.cls === 'warden') {
+      // fur mantle across the shoulders
+      cx.fillStyle = flash ? '#fff' : hsl(hue, 24, 26);
+      F.poly(cx, [[x - 14, y - 14], [x + 14, y - 14], [x + 10, y - 4], [x - 10, y - 4]]); cx.fill();
+      cx.fillStyle = flash ? '#fff' : hsl(hue, 20, 20);
+      for (var fp = -1; fp <= 1; fp++) { cx.beginPath(); cx.arc(x + fp * 8, y - 6, 3, 0, Math.PI * 2); cx.fill(); }
+      // a great warhorn raised, breathing a soft call-glow
+      var hx = x + 15, hy = y - 22;
+      cx.strokeStyle = flash ? '#fff' : hsl(hue, 30, 62); cx.lineWidth = 3.2; cx.lineCap = 'round';
+      cx.beginPath(); cx.moveTo(x + 6, y - 20); cx.lineTo(hx, hy); cx.stroke();
+      cx.fillStyle = flash ? '#fff' : hsl(hue, 40, 68);
+      cx.beginPath(); cx.arc(hx + 2, hy - 1, 4.5, 0, Math.PI * 2); cx.fill(); // bell of the horn
+      F.glow(cx, hx + 4, hy - 1, 12, hsl(hue, 85, 62), 0.4 + 0.2 * Math.sin(t * 5)); // the call
+      // a small bonded companion pacing at heel
+      var bx = x - 18 + Math.sin(t * 2.4) * 1.5, by = y + 16;
+      cx.fillStyle = flash ? '#fff' : hsl(hue, 30, 34);
+      F.rr(cx, bx - 6, by - 4, 12, 8, 3); cx.fill();               // haunches
+      cx.beginPath(); cx.arc(bx - 7, by - 4, 3.4, 0, Math.PI * 2); cx.fill(); // head
+      cx.strokeStyle = flash ? '#fff' : hsl(hue, 30, 34); cx.lineWidth = 2;
+      cx.beginPath(); cx.moveTo(bx + 6, by - 3); cx.lineTo(bx + 11, by - 6); cx.stroke(); // tail
+      F.glow(cx, bx - 7, by - 4, 5, hsl(hue, 85, 60), 0.4);        // its eye-shine
     }
     cx.restore();
   }

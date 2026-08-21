@@ -58,6 +58,28 @@
       ],
       slots: [1, 2, 3], clientBonus: [0, 0.1, 0.25]
     },
+    cartographer: {
+      id: 'cartographer', name: 'The Cartographer’s Table', icon: 'map', v: 6,
+      desc: 'Charts, dividers, and a surveyor who has been everywhere twice. The dark holds fewer surprises.',
+      costs: [90, 220, 460],
+      levels: [
+        'L1 — Darkness costs 1 less HP per passage.',
+        'L2 — Darkness costs 2 less; the floor map reads clearer.',
+        'L3 — Darkness costs 3 less; once per run, Survey ahead to slip past a rank.'
+      ],
+      darkCut: [1, 2, 3], survey: [false, false, true]
+    },
+    countinghouse: {
+      id: 'countinghouse', name: 'The Countinghouse', icon: 'coin', v: 6,
+      desc: 'A vault, a ledger, and a clerk who loves compound interest more than daylight.',
+      costs: [110, 260, 540],
+      levels: [
+        'L1 — Banked marks earn 1%/day; short loans up to 100ᵯ.',
+        'L2 — 2%/day; loans up to 250ᵯ.',
+        'L3 — 3%/day; loans up to 600ᵯ.'
+      ],
+      interest: [0.01, 0.02, 0.03], loanCap: [100, 250, 600]
+    },
     infirmary: {
       id: 'infirmary', name: 'Infirmary', icon: 'cross',
       desc: 'Cots, splints, and a stubborn refusal to let the Maw finish the job.',

@@ -1,5 +1,58 @@
 # Changelog — The Gilded Maw
 
+## v6.0 — "The Warden's Charter"
+
+After the Heart is answered, the company keeps house — and the house gets
+deeper roots. A fifth class, a difficulty ladder that carries across charters,
+a turning year, and two new buildings.
+
+### The Warden — a fifth class
+- A beast-bond delver built around the Menagerie. A Warden opens a **second
+  companion slot** on the run, **amplifies every beast passive by +50%**, and
+  lets beast abilities **recharge** instead of firing once and going quiet.
+- New skill **Call of the Pack**: command every companion to act at once
+  (ignoring cooldown) and take a ward. New talents: *Kindred* / *Houndmaster*
+  (L3), *Two as One* / *Thick Hide* (L6), *Alpha* (a third beast slot) /
+  *Wild Fury* (L9).
+- The Menagerie's beasts are now a **pack** you assemble at outfitting, not a
+  single companion — the old single-beast save is migrated into the new pack.
+
+### Ascension — a New-Charter+ ladder
+- Ten escalating tiers, each stacking a new modifier on all below it: dearer
+  wages and hires, tougher enemies and guardians, a hungrier dark, costlier
+  supplies, worse wounds, keener rivals, and at tier X a total wipe **collapses
+  a building**.
+- Clearing a tier (reaching any ending at it) **banks bonus Legacy Marks**,
+  unlocks the next, and can award an **Ascension relic** (The First Seal, The
+  Standing Ledger, The Ascendant Crown). The ladder **persists across charters**
+  in the Legacy store; choose your tier at Renewal.
+
+### The turning year — seasons & festivals
+- The surface year cycles through **Thaw, Glare, Fall, Frost** (8 days each),
+  each tilting the market — cheap hires in Thaw, glass-and-fire premiums in
+  Glare, cheap rations in Fall, dear fuel in Frost — and **tinting the town's
+  sky**, with a slow day/night cycle over the vista.
+- Rare **festival days** — the Founders' Fair, the Bell Toll, Lantern Night —
+  string lanterns across the town, shift the Maw's mood, and bring special
+  stock and richer contracts.
+
+### Two new buildings
+- **The Cartographer's Table** — the dark costs less HP per passage at every
+  level; at L3, once per run you may **Survey** ahead to slip past a whole rank.
+- **The Countinghouse** — banked marks earn **daily interest**, and you can take
+  **short loans** against a cap. Miss the due date and the clerk seizes what
+  they can, rolls the rest with penalty interest, and your renown suffers.
+
+### Polish
+- **Onboarding hints** — one-time contextual tips on your first hire, descent,
+  fight, death, contract, guardian, and mood (silent during Daily Descents).
+- New art: the Warden's figure (fur mantle, warhorn, a companion at heel) and
+  teal portrait; the Cartographer's Table and the Countinghouse on the skyline;
+  seasonal sky and festival lanterns.
+- Save migration v5 → v6. New v6 test coverage: Warden bond, the Ascension
+  ladder, seasons/festivals, the Countinghouse's interest & loans, the
+  Cartographer's survey, and hints — all green in the headless sim.
+
 ## v5.0 — "The Heart of It"
 
 The last trade. Everything the game has taught converges at depth 13, and the

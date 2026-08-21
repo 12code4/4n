@@ -62,6 +62,8 @@
     panel.appendChild(h('p', { html: 'Carrying goods ~<b>' + G.U.fmt(lootVal) + 'ᵯ</b> and <b>' + ex.marksFound + 'ᵯ</b> coin.' }));
     if (ex.torches <= 0) panel.appendChild(h('p', { html: '<span class="down">The torches are out. The dark charges for passage.</span>' }));
 
+    if (ex.bypass) panel.appendChild(h('p', { html: '<span class="up">A high ledge lets you slip past the next node.</span>' }));
+    if (G.Exp.canSurvey()) panel.appendChild(h('button.small', { text: '🗺 Survey ahead (skip a rank)', style: 'margin-bottom:6px', onclick: function () { G.Exp.survey(); UI.refresh(); } }));
     panel.appendChild(h('h3', { text: 'Choose the way' }));
     var choices = G.Exp.nextChoices();
     if (!choices.length) {

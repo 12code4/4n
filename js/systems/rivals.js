@@ -25,18 +25,19 @@
     var st = G.state;
     if (!Rv.active()) return;
     Rv.init();
+    var asc = G.Ascension ? G.Ascension.rivalMult() : 1; // ascension makes rivals keener
     st.rivals.forEach(function (r) {
       var def = Rv.def(r.id);
       r.marks += G.rint(2, 8);
       r.renown += G.rchance(0.25) ? 1 : 0;
       // push depth toward, but not past, the player's frontier + a little
       var frontier = Math.max(2, (st.stats.deepest || 1) + 1);
-      if (G.rchance(0.18 * def.pace) && r.depth < frontier) r.depth++;
+      if (G.rchance(0.18 * def.pace * asc) && r.depth < frontier) r.depth++;
       // occasionally a rival loses a crew (keeps them from running away with it)
       if (G.rchance(0.05) && r.depth > 2) { r.depth--; }
     });
     // contract sniping: an aggressive rival may grab an open posting
-    if (st.contracts && st.contracts.offers && st.contracts.offers.length && G.rchance(0.2)) {
+    if (st.contracts && st.contracts.offers && st.contracts.offers.length && G.rchance(0.2 * asc)) {
       var aggressor = st.rivals[0];
       st.rivals.forEach(function (r) { if (Rv.def(r.id).aggression > Rv.def(aggressor.id).aggression) aggressor = r; });
       if (G.rchance(Rv.def(aggressor.id).aggression)) {

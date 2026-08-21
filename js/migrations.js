@@ -78,4 +78,27 @@
     });
     return st;
   };
+
+  // v5 (5.0 "The Heart of It") → v6 (6.0 "The Warden's Charter")
+  G.migrations[5] = function (st) {
+    ['menagerie', 'cartographer', 'countinghouse'].forEach(function (b) { if (st.buildings[b] === undefined) st.buildings[b] = 0; });
+    // beasts: {owned, active} → {owned, chosen}
+    if (!st.beasts) st.beasts = { owned: [], chosen: [] };
+    if (!st.beasts.chosen) { st.beasts.chosen = st.beasts.active ? [st.beasts.active] : []; delete st.beasts.active; }
+    if (st.ascension === undefined) st.ascension = 0;
+    if (st.ascMax === undefined) st.ascMax = 0;
+    if (st.festival === undefined) st.festival = null;
+    if (st._lastSeason === undefined) st._lastSeason = 0;
+    if (st.loan === undefined) st.loan = null;
+    if (!st.hints) st.hints = {};
+    // a live expedition gains the new per-run fields
+    if (st.expedition) {
+      if (st.expedition.beasts === undefined) st.expedition.beasts = (st.expedition.beast ? [st.expedition.beast] : []);
+      if (st.expedition.surveyed === undefined) st.expedition.surveyed = false;
+    }
+    G.DATA.materialList().forEach(function (m) {
+      if (st.market[m.id] === undefined) st.market[m.id] = m.base;
+    });
+    return st;
+  };
 })();

@@ -17,13 +17,14 @@ var FILES = [
   'js/data/archive.js', 'js/data/renown.js', 'js/data/relics.js', 'js/data/talents.js',
   'js/data/achievements.js', 'js/data/rivals.js',
   'js/data/moods.js', 'js/data/omens.js', 'js/data/veins.js', 'js/data/beasts.js', 'js/data/legacy.js',
-  'js/data/heart.js',
+  'js/data/heart.js', 'js/data/ascension.js', 'js/data/seasons.js',
   'js/migrations.js',
   'js/systems/state.js', 'js/systems/delvers.js', 'js/systems/economy.js',
   'js/systems/forge.js', 'js/systems/contracts.js',
   'js/systems/renown.js', 'js/systems/relics.js', 'js/systems/rivals.js', 'js/systems/quests.js',
   'js/systems/moods.js', 'js/systems/omens.js', 'js/systems/beasts.js', 'js/systems/prestige.js',
   'js/systems/codex.js', 'js/systems/daily.js',
+  'js/systems/ascension.js', 'js/systems/seasons.js', 'js/systems/finance.js', 'js/systems/hints.js',
   'js/systems/expedition.js', 'js/systems/combat.js'
 ];
 FILES.forEach(function (f) {
@@ -443,7 +444,7 @@ section('v2.0 Save migration v1 → v2');
   G.state = migrated;
   var s = G.serialize();
   var pay2 = JSON.parse(s);
-  ok(pay2.sv === 5, 'serialized at save-version 5 (full migration chain)');
+  ok(pay2.sv === 6, 'serialized at save-version 6 (full migration chain)');
 })();
 
 section('v2.0 Emberdeep: reach and fight the Smelted King');
@@ -673,7 +674,7 @@ section('v3.0 Save migration v2 → v3');
   migrated.delvers.forEach(function (d) { ok(Array.isArray(d.talents) && typeof d.face === 'number', 'migration adds talents+face'); });
   ok(migrated.graveyard[0].honored === false, 'migration adds honored flag to graves');
   G.state = migrated;
-  ok(JSON.parse(G.serialize()).sv === 5, 'serializes at v5 (full migration chain)');
+  ok(JSON.parse(G.serialize()).sv === 6, 'serializes at v6 (full migration chain)');
 })();
 
 /* ---------------- v4.0: moods, omens, status, veins, beasts, prestige ---------------- */
@@ -811,22 +812,23 @@ section('v4.0 Beasts: rescue, capacity, and active ability');
   ok(G.Beasts.rescue('pulse_pup'), 'rescue into L1 menagerie');
   ok(G.Beasts.rescue('cinder_whelp'), 'rescue a second');
   ok(!G.Beasts.rescue('glass_fledgling'), 'third blocked at capacity 2');
-  G.Beasts.setActive('pulse_pup');
-  ok(st.beasts.active === 'pulse_pup', 'active beast set');
-  // active ability fires once in combat
+  G.Beasts.toggleChosen('pulse_pup');
+  ok(st.beasts.chosen.indexOf('pulse_pup') >= 0, 'beast chosen for the pack');
+  // active ability fires once in combat (no Warden → single-slot, spent for the fight)
   var guard = 0; while (G.Delvers.roster().length < 2 && guard++ < 20) {}
   G.Economy.buySupply('torches', 6); G.Economy.buySupply('rations', 6);
   G.Exp.launch(G.Delvers.roster().slice(0, 2).map(function (d) { return d.id; }), 1);
-  ok(st.expedition.beast === 'pulse_pup', 'beast locked onto run');
+  ok(st.expedition.beasts.indexOf('pulse_pup') >= 0, 'beast locked onto run');
   G.Combat.start(['hollow_shambler', 'gravemite'], {});
   var c = st.expedition.combat;
   var actor = G.Combat.actor();
   var e0 = c.enemies[0]; var hp0 = e0.hp;
-  var r = G.Combat.act({ type: 'beast', target: e0.uid });
-  ok(c.beastUsed, 'beast ability consumed');
+  ok(G.Combat.beastReady('pulse_pup'), 'beast ready before use');
+  var r = G.Combat.act({ type: 'beast', target: e0.uid, beastId: 'pulse_pup' });
+  ok(!G.Combat.beastReady('pulse_pup'), 'beast ability consumed (spent for fight)');
   ok(e0.hp < hp0, 'pulse pup bite dealt damage');
-  var r2 = G.Combat.act({ type: 'beast', target: e0.uid });
-  ok(!r2.ok, 'beast ability only once per fight');
+  var r2 = G.Combat.act({ type: 'beast', target: e0.uid, beastId: 'pulse_pup' });
+  ok(!r2.ok, 'beast ability only once per fight without a Warden');
   st.expedition = null;
 })();
 
@@ -1044,6 +1046,202 @@ section('v5.0 Full campaign: a fresh company to the Heart');
   assertNoNaN('full-campaign');
   console.log('  » day ' + st.day + ': deepest ' + st.stats.deepest + ', renown ' + (st.renown || 0) +
     ', guardians ' + Object.keys(st.guardiansSlain).length + ', reachedHeart=' + reachedHeart + (ending ? ' (' + ending + ')' : ''));
+})();
+
+/* ================= v6.0 "The Warden's Charter" ================= */
+
+section('v6.0 Ascension: ladder gating, cumulative mods, and clear rewards');
+(function () {
+  G.newGame(6100);
+  var st = G.state;
+  // fresh charter: no ascension cleared → may only start at tier 1 (maxAllowed = maxCleared+1)
+  ok(G.Ascension.maxCleared() === 0, 'no tiers cleared on a fresh legacy');
+  ok(G.Ascension.maxAllowed() === 1, 'may attempt tier I first');
+  G.Ascension.setTier(9);
+  ok(G.Ascension.tier() === 1, 'setTier clamps to the allowed ceiling');
+  // force the ladder open and inspect cumulative modifiers at a high tier
+  st.ascMax = 10; G.Ascension.setTier(9);
+  ok(G.Ascension.tier() === 9, 'may attempt up to maxCleared+1');
+  ok(Math.abs(G.Ascension.wageMult() - 1.25) < 1e-9, 'tier ≥1 raises wages ×1.25');
+  ok(Math.abs(G.Ascension.hireMult() - 1.25) < 1e-9, 'tier ≥2 raises hire cost ×1.25');
+  ok(Math.abs(G.Ascension.enemyHp() - 1.10) < 1e-9, 'tier ≥3 raises enemy HP ×1.10');
+  ok(G.Ascension.enemyDmg() === 1, 'tier ≥4 adds +1 enemy damage');
+  ok(G.Ascension.torch() === 1, 'tier ≥5 burns +1 torch');
+  ok(Math.abs(G.Ascension.guardianHp() - 1.15) < 1e-9, 'tier ≥6 raises guardian HP');
+  ok(Math.abs(G.Ascension.supplyMult() - 1.30) < 1e-9, 'tier ≥7 raises supply cost');
+  ok(G.Ascension.injuryChance() > 0 && G.Ascension.injuryDays() === 2, 'tier ≥8 worsens injuries');
+  ok(Math.abs(G.Ascension.rivalMult() - 1.6) < 1e-9, 'tier ≥9 sharpens rivals');
+  ok(!G.Ascension.wipeCollapses(), 'building-collapse only at tier X');
+  G.Ascension.setTier(10); ok(G.Ascension.wipeCollapses(), 'tier X collapses a building on a wipe');
+  // clearing a tier banks it, awards its relic and bonus marks
+  G.newGame(6101); st = G.state; st.ascMax = 5; G.Ascension.setTier(3);
+  st.legacy.marks = 0;
+  var relBefore = G.Relics.owned().length;
+  G.Ascension.onEnding();
+  ok(G.Relics.owned().indexOf('asc_first_seal') >= 0, 'clearing tier III awards The First Seal');
+  ok(G.Relics.owned().length > relBefore, 'a new Ascension relic entered the vault');
+  ok(st.legacy.marks === 3, 'clearing tier III banks +3 Legacy Marks');
+  ok(st.ascMax === 5, 'clearing a below-max tier does not lower the ladder');
+  // clearing a NEW high tier raises ascMax
+  G.newGame(6102); st = G.state; st.ascMax = 4; G.Ascension.setTier(5);
+  G.Ascension.onEnding();
+  ok(st.ascMax === 5, 'clearing a new-high tier raises the ladder');
+})();
+
+section('v6.0 Warden: the beast-bond opens a second slot and amplifies the pack');
+(function () {
+  G.newGame(6200);
+  var st = G.state; st.marks = 5000;
+  G.Economy.build('menagerie'); G.Economy.build('menagerie'); // L2 → capacity 4
+  ok(G.Beasts.rescue('pulse_pup'), 'rescue pulse pup (dmg +1)');
+  ok(G.Beasts.rescue('cinder_whelp'), 'rescue cinder whelp (dmg +2)');
+  // craft a Warden onto the roster
+  var w = G.Delvers.generate(0); w.cls = 'warden'; w.stats = { vig: 27, might: 6, wits: 5, luck: 5 }; w.hp = 27; w.lvl = 6;
+  var mate = G.Delvers.generate(0); mate.cls = 'vanguard'; // any non-warden
+  G.Delvers.addToRoster(w); G.Delvers.addToRoster(mate);
+  ok(G.Delvers.cls(w).passive === 'beastbond', 'the Warden carries the beast-bond passive');
+  // with a Warden on the team the pack gets 2 slots (vs 1 otherwise)
+  ok(G.Beasts.slots([mate]) === 1, 'a non-Warden team rides one beast');
+  ok(G.Beasts.slots([w, mate]) === 2, 'a Warden team rides two beasts');
+  G.Beasts.toggleChosen('pulse_pup'); G.Beasts.toggleChosen('cinder_whelp');
+  ok(G.Beasts.chosen().length === 2, 'both beasts chosen for the pack');
+  G.Economy.buySupply('torches', 8); G.Economy.buySupply('rations', 8);
+  G.Exp.launch([w.id, mate.id], 1);
+  ok(st.expedition.beasts.length === 2, 'both beasts locked onto the Warden run');
+  ok(G.Beasts.wardenBond(), 'the Warden bond is active this run');
+  // dmg passive: sum(1+2)=3, ×1.5 Warden amplification = round(4.5)=5
+  ok(G.Beasts.passive('dmg', 0) === 5, 'the pack passive is summed and Warden-amplified (+50%)');
+  // Call of the Pack: the command skill fires every beast at once
+  G.Combat.start(['hollow_shambler', 'gravemite'], {});
+  var c = st.expedition.combat;
+  // seat the Warden as actor and drive a command
+  c.order = [w.id]; c.turn = 0; c.awaiting = w.id; c.grit = 5;
+  var e0 = c.enemies[0]; var hp0 = e0.hp;
+  var r = G.Combat.act({ type: 'skill', target: e0.uid });
+  ok(r.ok, 'Call of the Pack resolves');
+  ok(e0.hp < hp0, 'the summoned pack draws blood');
+  st.expedition = null;
+})();
+
+section('v6.0 Seasons: the year turns and tilts the market');
+(function () {
+  G.newGame(6300);
+  var st = G.state;
+  ok(G.Seasons.index() === 0 && G.Seasons.def().id === 'thaw', 'day 1 is Thaw');
+  st.day = 1 + G.DATA.SEASON_LEN;      // second season block
+  ok(G.Seasons.def().id === 'glare', 'season advances to Glare');
+  ok(G.Seasons.sellMult('ember_glass') > 1, 'Glare pays a premium for glassy/fiery goods');
+  st.day = 1 + G.DATA.SEASON_LEN * 3;  // Frost
+  ok(G.Seasons.def().id === 'frost', 'season advances to Frost');
+  ok(G.Seasons.supplyMult('torches') > 1, 'Frost makes torches dear');
+  st.day = 1 + G.DATA.SEASON_LEN * 4;  // wraps back to Thaw next year
+  ok(G.Seasons.def().id === 'thaw', 'the year wraps back to Thaw');
+  ok(G.Seasons.hireDiscount() > 0, 'Thaw discounts hires');
+})();
+
+section('v6.0 Festivals: rare days that pay and shift the mood');
+(function () {
+  G.newGame(6350);
+  var st = G.state; st.day = 10;
+  st.festival = { id: 'founders', until: st.day + 1 };
+  var f = G.Seasons.festival();
+  ok(f && f.id === 'founders', 'the Founders’ Fair is active');
+  ok(G.Seasons.festivalContractBonus() === 2, 'the Fair fattens the contract board');
+  ok(G.Seasons.sellMult('grave_iron') >= 1.25, 'the Fair lifts every sale');
+  // a lapsed festival is cleared on the next tick
+  st.festival = { id: 'lantern', until: st.day - 1 };
+  st._lastSeason = G.Seasons.index();
+  G.Seasons.tick();
+  ok(!st.festival, 'a lapsed festival is taken down on the day tick');
+})();
+
+section('v6.0 Countinghouse: interest, loans, and overdue seizure');
+(function () {
+  G.newGame(6400);
+  var st = G.state; st.marks = 1000;
+  ok(G.Finance.takeLoan(50).ok === false, 'no loan without a Countinghouse');
+  G.Economy.build('countinghouse'); // L1 → 1%/day, cap 100
+  ok(Math.abs(G.Finance.rate() - 0.01) < 1e-9, 'L1 pays 1%/day');
+  ok(G.Finance.loanCap() === 100, 'L1 caps loans at 100');
+  // banked marks earn interest on the day tick
+  var before = st.marks;
+  G.Finance.dailyInterest();
+  ok(st.marks > before, 'banked marks earn interest');
+  // take a loan (clamped to cap), then repay early
+  var r = G.Finance.takeLoan(500);
+  ok(r.ok && st.loan && st.loan.principal === 100, 'loan clamped to the L1 cap');
+  ok(!G.Finance.takeLoan(50).ok, 'only one loan outstanding at a time');
+  ok(st.loan.owed === 120, 'a 100ᵯ loan owes 120ᵯ');
+  st.marks = 1000;
+  ok(G.Finance.repayLoan().ok, 'repay the loan in full');
+  ok(!st.loan, 'the loan is cleared once repaid');
+  // an overdue loan is seized and rolls with penalty + renown ding
+  st.renown = 50;
+  G.Finance.takeLoan(100); st.marks = 0; st.loan.dueDay = st.day;
+  var rn0 = st.renown;
+  G.Finance.dailyInterest();
+  ok(st.loan && st.loan.owed > 0, 'an unpayable overdue loan rolls forward');
+  ok(st.renown < rn0, 'defaulting on a loan costs renown');
+})();
+
+section('v6.0 Cartographer: the dark bites less, and Survey slips a rank');
+(function () {
+  G.newGame(6500);
+  var st = G.state; st.marks = 3000;
+  var base = G.BAL.darknessHp;
+  G.Economy.build('cartographer'); // L1 → darkCut 1, no survey
+  ok(G.bldFx('cartographer', 'darkCut', 0) === 1, 'L1 cuts 1 dark HP');
+  ok(!G.bldFx('cartographer', 'survey', false), 'no survey until L3');
+  G.Economy.build('cartographer'); G.Economy.build('cartographer'); // L3
+  ok(G.bldFx('cartographer', 'darkCut', 0) === 3, 'L3 cuts 3 dark HP');
+  ok(G.bldFx('cartographer', 'survey', false) === true, 'L3 unlocks Survey');
+  // Survey bypasses the next rank, once per run
+  G.Economy.buySupply('torches', 8); G.Economy.buySupply('rations', 8);
+  var a = G.Delvers.roster()[0], b = G.Delvers.roster()[1];
+  G.Exp.launch([a.id, b.id], 1);
+  var ex = st.expedition;
+  ok(G.Exp.canSurvey(), 'Survey is offered on the map');
+  G.Exp.survey();
+  ok(ex.bypass && ex.surveyed, 'Survey marks a bypass and is spent');
+  ok(!G.Exp.canSurvey(), 'Survey is once per run');
+  st.expedition = null;
+})();
+
+section('v6.0 Hints: each onboarding tip fires exactly once');
+(function () {
+  G.newGame(6600);
+  var st = G.state;
+  var fired = 0; G.on('hint', function () { fired++; });
+  G.Hints.fire('firstHire'); G.Hints.fire('firstHire'); G.Hints.fire('firstHire');
+  ok(fired === 1, 'a hint fires only the first time');
+  ok(st.hints.firstHire === true, 'the hint is recorded as seen');
+  G.Hints.fire('firstCombat');
+  ok(fired === 2, 'a different hint still fires');
+  // dailies suppress tutorial noise
+  st.daily = { id: 'x' };
+  G.Hints.fire('firstDeath');
+  ok(fired === 2, 'hints stay silent during a Daily Descent');
+})();
+
+section('v6.0 Save migration v5 → v6');
+(function () {
+  G.newGame(6700);
+  var st = G.U.deep(G.state);
+  // strip it back to a v5-era shape
+  st.buildings.cartographer = undefined; delete st.buildings.cartographer;
+  st.buildings.countinghouse = undefined; delete st.buildings.countinghouse;
+  st.beasts = { owned: ['pulse_pup'], active: 'pulse_pup' };
+  delete st.ascension; delete st.ascMax; delete st.festival; delete st._lastSeason;
+  delete st.loan; delete st.hints;
+  var migrated = G.migrate({ sv: 5, gv: '5.0.0', state: st });
+  ok(migrated.buildings.cartographer === 0 && migrated.buildings.countinghouse === 0, 'v6 adds the new buildings');
+  ok(Array.isArray(migrated.beasts.chosen) && migrated.beasts.chosen[0] === 'pulse_pup', 'the active beast becomes the chosen pack');
+  ok(migrated.beasts.active === undefined, 'the old single-active field is dropped');
+  ok(migrated.ascension === 0 && migrated.ascMax === 0, 'v6 seeds the ascension ladder');
+  ok(migrated.festival === null && migrated._lastSeason === 0, 'v6 seeds season/festival state');
+  ok(migrated.loan === null && typeof migrated.hints === 'object', 'v6 seeds loan + hints');
+  G.state = migrated;
+  ok(JSON.parse(G.serialize()).sv === 6, 'the migrated save serializes at v6');
 })();
 
 /* ---------------- regression: guardian flee must not strand the team ---------------- */

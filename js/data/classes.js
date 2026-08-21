@@ -34,6 +34,19 @@
       },
       hue: 130
     },
+    warden: {
+      id: 'warden', name: 'Warden', icon: 'horn', v: 6,
+      desc: 'Beast-bond. Fights alongside the Menagerie’s creatures — commands them, amplifies them, and lets a second ride along.',
+      base: { vig: 27, might: 6, wits: 5, luck: 5 },
+      growth: { vig: 3.4, might: 1.0, wits: 0.7, luck: 0.6 },
+      skill: {
+        id: 'call_pack', name: 'Call of the Pack', cost: 2, target: 'self', kind: 'command',
+        power: function (d) { return 0; },
+        desc: 'Command the companion beast to act at once (ignoring its cooldown), and take a ward.'
+      },
+      passive: 'beastbond', // second beast slot; beast abilities recharge; +50% beast passives
+      hue: 160
+    },
     alchemist: {
       id: 'alchemist', name: 'Alchemist', icon: 'flask', v: 2,
       desc: 'Brews the Maw into bottles. Mends the whole line; sharpens every bandage.',

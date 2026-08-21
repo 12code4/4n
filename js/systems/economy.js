@@ -36,9 +36,13 @@
     return { ok: true, earned: earned };
   };
 
+  E.supplyUnit = function (kind) {
+    var m = (G.Ascension ? G.Ascension.supplyMult() : 1) * (G.Seasons ? G.Seasons.supplyMult(kind) : 1);
+    return Math.max(1, Math.round((G.BAL.supplyCost[kind] || 1) * m));
+  };
   E.buySupply = function (kind, qty) {
     var st = G.state;
-    var cost = (G.BAL.supplyCost[kind] || 1) * qty;
+    var cost = E.supplyUnit(kind) * qty;
     if (st.marks < cost) return { ok: false, msg: 'Not enough marks.' };
     st.marks -= cost; st.stats.spent += cost;
     st.supplies[kind] = (st.supplies[kind] || 0) + qty;
@@ -99,7 +103,8 @@
   E.price = function (id) {
     var st = G.state;
     var mood = G.Moods ? G.Moods.fx('marketMult', 1) : 1; // the Maw floods or starves the market
-    return Math.max(1, Math.round((st.market[id] || 1) * E.shockMult(id) * mood));
+    var season = G.Seasons ? G.Seasons.sellMult(id) : 1;   // seasonal + festival tilt
+    return Math.max(1, Math.round((st.market[id] || 1) * E.shockMult(id) * mood * season));
   };
   E.marketEventsTick = function () {
     var st = G.state;
@@ -154,7 +159,7 @@
     var due = 0, strikers = [];
     G.Delvers.roster().forEach(function (d) {
       if (d.freeDays > 0) { d.freeDays--; return; }
-      var w = G.Delvers.wage(d);
+      var w = Math.round(G.Delvers.wage(d) * (G.Ascension ? G.Ascension.wageMult() : 1));
       if (st.marks >= w) {
         st.marks -= w; st.stats.spent += w; due += w;
         st.unpaid[d.id] = 0;
@@ -185,6 +190,7 @@
     var st = G.state;
     st.day++;
     st.stats.daysRun++;
+    if (G.Seasons) G.Seasons.tick();
     if (G.Moods) G.Moods.tick();
     E.shopSales();
     E.payWages();
@@ -193,6 +199,7 @@
     if (G.Contracts) G.Contracts.dailyTick();
     if (G.Rivals) G.Rivals.dailyTick();
     if (G.Beasts) G.Beasts.betweenRuns();
+    if (G.Finance) G.Finance.dailyInterest();
     E.healInjuries();
     G.Delvers.dailyHeal();
     G.Delvers.refreshPool();
@@ -221,12 +228,13 @@
   E.checkInjuries = function (delvers) {
     var st = G.state;
     if (G.Relics && G.Relics.flag('startInjuryImmune')) return; // salt-charm wards all wounds
+    var chance = 0.5 + (G.Ascension ? G.Ascension.injuryChance() : 0);
     delvers.forEach(function (d) {
       if (!d.alive || d.injury) return;
       if (d.hp / G.Delvers.maxHp(d) > 0.35) return;
-      if (!G.rchance(0.5)) return;
+      if (!G.rchance(chance)) return;
       var inj = G.rpick(G.DATA.injuries);
-      var days = Math.max(2, inj.days - G.bld('infirmary')); // infirmary shortens
+      var days = Math.max(2, inj.days - G.bld('infirmary') + (G.Ascension ? G.Ascension.injuryDays() : 0)); // infirmary shortens, ascension lengthens
       d.injury = { id: inj.id, healDay: st.day + days };
       for (var k in inj.mod) d.stats[k] = Math.max(1, d.stats[k] + inj.mod[k]);
       d.hp = Math.min(d.hp, G.Delvers.maxHp(d));

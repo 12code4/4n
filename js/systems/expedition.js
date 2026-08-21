@@ -146,7 +146,7 @@
       daysOut: 0, bypass: false, brinkUsed: false,
       xpEarned: {}, killCount: 0, log: [],
       omens: (st.omenChosen || []).slice(),                       // v4 locked omens
-      beast: (st.beasts && st.beasts.active) || null              // v4 companion for the run
+      beasts: G.Beasts ? G.Beasts.lockRun(teamIds.map(G.Delvers.get)) : [] // v6 companion pack for the run
     };
     if (G.Omens) G.Omens.reset(); // clear the offer once committed
     st.supplies.torches = 0; st.supplies.rations = 0; st.supplies.bandages = 0;
@@ -154,6 +154,7 @@
     teamIds.forEach(function (id) { G.Delvers.get(id).delves++; });
     X.enterFloor(depth);
     G.log('Expedition departs for depth ' + depth + '. The winch pays out rope.', 'story');
+    if (G.Hints) G.Hints.fire('firstDescent');
     G.emit('expedition');
     return { ok: true };
   };
@@ -213,6 +214,19 @@
   };
 
   /* ---------- movement & node resolution ---------- */
+  /* Cartographer's Table L3: survey the way ahead to slip past a rank, once per run */
+  X.canSurvey = function () {
+    var ex = G.state.expedition;
+    return ex && ex.mode === 'map' && G.bldFx('cartographer', 'survey', false) && !ex.surveyed && !ex.bypass;
+  };
+  X.survey = function () {
+    var ex = G.state.expedition;
+    if (!X.canSurvey()) return;
+    ex.surveyed = true; ex.bypass = true;
+    X.elog('The Cartographer’s survey pays off — you read a high ledge past the next rank.', 'good');
+    G.emit('expedition');
+  };
+
   X.currentNode = function () {
     var ex = G.state.expedition;
     return ex && ex.map ? X.findNode(ex.map, ex.at) : null;
@@ -233,19 +247,20 @@
     var node = X.findNode(ex.map, nodeId);
     ex.at = nodeId;
 
-    // torchlight — a relic (the Blank Card) or a held-breath mood makes the dark hungrier
-    var torchCost = 1 + (G.Relics ? G.Relics.add('torchDrain') : 0) + (G.Moods ? G.Moods.fx('torch', 0) : 0);
+    // torchlight — relic / mood / ascension can make the dark hungrier for torches
+    var torchCost = 1 + (G.Relics ? G.Relics.add('torchDrain') : 0) + (G.Moods ? G.Moods.fx('torch', 0) : 0) + (G.Ascension ? G.Ascension.torch() : 0);
     if (ex.torches >= torchCost) {
       ex.torches -= torchCost;
     } else {
       ex.torches = 0; // burn what's left, then grope
       var team = X.team();
       var hurt = 0;
+      var darkDmg = Math.max(1, G.BAL.darknessHp - G.bldFx('cartographer', 'darkCut', 0)); // the Table steadies the crew
       team.forEach(function (d) {
         var t = G.Delvers.trait(d);
-        if (!t.noDark) { d.hp = Math.max(1, d.hp - G.BAL.darknessHp); hurt++; }
+        if (!t.noDark) { d.hp = Math.max(1, d.hp - darkDmg); hurt++; }
       });
-      if (hurt) X.elog('The team gropes forward in the dark. (-' + G.BAL.darknessHp + ' hp)', 'bad');
+      if (hurt) X.elog('The team gropes forward in the dark. (-' + darkDmg + ' hp)', 'bad');
       else X.elog('The team gropes forward in the dark — the tunnel-born lead the way.', 'info');
     }
 
@@ -275,6 +290,7 @@
       case 'guardian': {
         // resolved via shaft-style choice UI first (approach), then fight
         ex.mode = 'guardian';
+        if (G.Hints) G.Hints.fire('firstGuardian');
         break;
       }
       case 'rival': {
@@ -671,6 +687,7 @@
       if (G.Renown) G.Renown.award(null, 80);
     }
     if (G.Achieve) G.Achieve.grant('heart_' + endingId);
+    if (G.Ascension) G.Ascension.onEnding(); // bank the Ascension clear, unlock the next tier
     ex.endingId = endingId;
     // carry the choice into the surface summary; the UI shows the epilogue
     var summary = X.surface();
@@ -729,6 +746,11 @@
     if (!ex) return;
     var lost = X.team();
     lost.forEach(function (d) { G.Delvers.kill(d, 'lost at depth ' + ex.depth); });
+    // Ascension X: a total wipe collapses one building by a level
+    if (G.Ascension && G.Ascension.wipeCollapses()) {
+      var built = Object.keys(st.buildings).filter(function (b) { return st.buildings[b] > (b === 'storehouse' ? 1 : 0); });
+      if (built.length) { var b = G.rpick(built); st.buildings[b]--; G.log('The Collapsing Charter takes its due: the ' + G.DATA.buildings[b].name + ' falls to L' + st.buildings[b] + '.', 'bad'); }
+    }
     var summary = { haul: 0, marks: 0, days: ex.daysOut, kills: ex.killCount, wiped: true, survivors: 0, depth: ex.depth };
     st.expedition = null;
     st.lastRun = summary;

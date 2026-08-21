@@ -48,6 +48,20 @@
         { id: 'still_point', name: 'Still Point', desc: 'Start each fight with +1 Grit.' }
       ]
     },
+    warden: {
+      3: [
+        { id: 'kindred', name: 'Kindred', desc: 'The companion beast’s passive bonuses are doubled.' },
+        { id: 'houndmaster', name: 'Houndmaster', desc: 'Call of the Pack also strikes a random enemy for your Might.' }
+      ],
+      6: [
+        { id: 'two_as_one', name: 'Two as One', desc: 'Beast active abilities recharge a round faster.' },
+        { id: 'thick_hide', name: 'Thick Hide', desc: 'Reduce all damage you take by 2 (stacks with armor).' }
+      ],
+      9: [
+        { id: 'alpha', name: 'Alpha', desc: 'A third companion beast may ride along on every expedition.' },
+        { id: 'wild_fury', name: 'Wild Fury', desc: 'Whenever a beast acts, the whole party deals +2 damage that round.' }
+      ]
+    },
     alchemist: {
       3: [
         { id: 'stronger_brew', name: 'Stronger Brew', desc: 'Field Tonic heals +3.' },

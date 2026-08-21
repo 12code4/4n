@@ -62,6 +62,9 @@
       st.stats.spent += fee;
       G.log('Contract failed: ' + a.clientName + ' wanted ' + a.qty + '× ' + G.DATA.materials[a.mat].name + '. Forfeit fee ' + fee + 'ᵯ.', 'bad');
     });
+    // festival commissions: a burst of extra postings
+    var fbonus = G.Seasons ? G.Seasons.festivalContractBonus() : 0;
+    for (var fb = 0; fb < fbonus; fb++) { var fo = C.generateOffer(); if (fo) { fo.payout = Math.round(fo.payout * 1.3); ct.offers.push(fo); } }
     // fresh offers drift in
     while (ct.offers.length < 3 && G.rchance(0.55)) {
       var o = C.generateOffer();
@@ -101,6 +104,7 @@
     st.stats.contractsDone = (st.stats.contractsDone || 0) + 1;
     ct.active.splice(idx, 1);
     if (G.Renown) G.Renown.award('contract');
+    if (G.Hints) G.Hints.fire('firstContract');
     if (G.Achieve) G.Achieve.check();
     G.log('Contract delivered: ' + a.clientName + ' pays ' + a.payout + 'ᵯ. Word of the company spreads.', 'good');
     G.emit('contracts');
