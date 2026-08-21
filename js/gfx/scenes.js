@@ -48,9 +48,12 @@
     F.poly(cx, [[0, H * 0.7], [W * 0.3, H * 0.6], [W * 0.55, H * 0.68], [W * 0.8, H * 0.58], [W, H * 0.66], [W, H], [0, H]]);
     cx.fill();
 
-    // THE MAW: rift on the right of the visible play area
+    // THE MAW: rift on the right of the visible play area — glow tinted & paced by mood
     var mx = F.uW() * 0.82, gy = H * 0.72;
-    F.glow(cx, mx, gy + 30, 190, 'rgba(255,120,30,0.5)', 0.55 + 0.1 * Math.sin(t * 1.3));
+    var moodHue = 20, moodBeat = 1.3;
+    if (G.Moods && G.state) { var mo = G.Moods.current(); moodHue = mo.hue; moodBeat = mo.id === 'holding' ? 0.6 : mo.id === 'restless' || mo.id === 'hungry' ? 2.1 : 1.3; }
+    var riftGlow = 'hsla(' + moodHue + ',90%,50%,0.5)';
+    F.glow(cx, mx, gy + 30, 190, riftGlow, 0.5 + 0.14 * Math.sin(t * moodBeat));
     cx.fillStyle = '#050303';
     F.poly(cx, [[mx - 90, H], [mx - 55, gy + 40], [mx - 20, gy + 6], [mx + 12, gy + 34], [mx + 45, gy - 2], [mx + 80, gy + 46], [mx + 110, H]]);
     cx.fill();
@@ -83,12 +86,14 @@
     var st = G.state;
     if (st) {
       var by = H * 0.8, U = F.uW();
-      drawStorehouse(cx, U * 0.04, by, st.buildings.storehouse, t);
-      drawTavern(cx, U * 0.20, by, st.buildings.tavern, t);
-      drawAssay(cx, U * 0.36, by, st.buildings.assay, t);
-      drawInfirmary(cx, U * 0.49, by, st.buildings.infirmary, t);
-      if (st.buildings.forge) drawForge(cx, U * 0.62, by, st.buildings.forge, t);
-      if (st.buildings.contracts) drawContractsBoard(cx, U * 0.76, by, st.buildings.contracts, t);
+      drawStorehouse(cx, U * 0.02, by, st.buildings.storehouse, t);
+      drawTavern(cx, U * 0.16, by, st.buildings.tavern, t);
+      drawAssay(cx, U * 0.30, by, st.buildings.assay, t);
+      drawInfirmary(cx, U * 0.41, by, st.buildings.infirmary, t);
+      if (st.buildings.forge) drawForge(cx, U * 0.52, by, st.buildings.forge, t);
+      if (st.buildings.contracts) drawContractsBoard(cx, U * 0.64, by, st.buildings.contracts, t);
+      if (st.buildings.menagerie) drawMenagerie(cx, U * 0.75, by, st.buildings.menagerie, t);
+      if (st.buildings.charterhall) drawCharterHall(cx, U * 0.87, by, st.buildings.charterhall, t);
     }
 
     // fog band
@@ -240,6 +245,46 @@
     F.glow(cx, x + 30, y - 58, 10, 'rgba(255,190,90,0.5)', 0.5); // lantern over the board
   }
 
+  function drawMenagerie(cx, x, y, lvl, t) {
+    var w = 72 + lvl * 8, h = 42 + lvl * 5;
+    cx.fillStyle = '#26301f';
+    cx.fillRect(x, y - h, w, h);
+    // fenced pen with posts
+    cx.strokeStyle = '#4a3a24'; cx.lineWidth = 2;
+    for (var p = 0; p <= 4; p++) { cx.beginPath(); cx.moveTo(x + p * w / 4, y); cx.lineTo(x + p * w / 4, y - 16); cx.stroke(); }
+    cx.beginPath(); cx.moveTo(x, y - 12); cx.lineTo(x + w, y - 12); cx.stroke();
+    // canopy roof
+    cx.fillStyle = '#38471f';
+    F.poly(cx, [[x - 4, y - h], [x + w / 2, y - h - 14], [x + w + 4, y - h]]); cx.fill();
+    windowLit(cx, x + 10, y - h + 12, 12, 10, t, 6);
+    // a couple of glowing eyes in the pen
+    cx.fillStyle = 'rgba(255,200,120,' + (0.6 + 0.3 * Math.sin(t * 3)) + ')';
+    cx.beginPath(); cx.arc(x + w * 0.4, y - 6, 1.6, 0, Math.PI * 2); cx.arc(x + w * 0.45, y - 6, 1.6, 0, Math.PI * 2); cx.fill();
+    cx.fillStyle = 'rgba(150,220,255,' + (0.5 + 0.3 * Math.sin(t * 2 + 1)) + ')';
+    cx.beginPath(); cx.arc(x + w * 0.7, y - 8, 1.4, 0, Math.PI * 2); cx.arc(x + w * 0.74, y - 8, 1.4, 0, Math.PI * 2); cx.fill();
+  }
+  function drawCharterHall(cx, x, y, lvl, t) {
+    var w = 66 + lvl * 8, h = 58 + lvl * 8;
+    cx.fillStyle = '#2b2430';
+    cx.fillRect(x, y - h, w, h);
+    // pediment
+    cx.fillStyle = '#3d3346';
+    F.poly(cx, [[x - 6, y - h], [x + w / 2, y - h - 20], [x + w + 6, y - h]]); cx.fill();
+    // columns
+    cx.fillStyle = '#4a4056';
+    for (var col = 0; col < 4; col++) cx.fillRect(x + 6 + col * (w - 12) / 3 - 2, y - h + 8, 5, h - 8);
+    // hanging banner (company colours)
+    cx.fillStyle = '#7a2d3a';
+    var sway = Math.sin(t * 1.2) * 0.05;
+    cx.save(); cx.translate(x + w / 2, y - h + 6); cx.rotate(sway);
+    cx.fillRect(-8, 0, 16, 26);
+    cx.fillStyle = '#c9a468';
+    cx.beginPath(); cx.arc(0, 10, 4, 0, Math.PI * 2); cx.fill(); // emblem
+    cx.restore();
+    windowLit(cx, x + 8, y - 24, 10, 12, t, 3);
+    windowLit(cx, x + w - 18, y - 24, 10, 12, t, 5);
+  }
+
   /* =================== DELVE MAP =================== */
   F.mapLayout = function (W, H) {
     var ex = G.state.expedition;
@@ -369,6 +414,14 @@
         cx.beginPath(); cx.moveTo(x - 5, y + 6); cx.lineTo(x - 2, y - 6); cx.moveTo(x + 5, y + 6); cx.lineTo(x + 2, y - 6); cx.stroke();
         cx.beginPath(); cx.moveTo(x - 2, y - 6); cx.lineTo(x - 7, y - 4); cx.lineTo(x - 2, y - 2); cx.moveTo(x + 2, y - 6); cx.lineTo(x + 7, y - 4); cx.lineTo(x + 2, y - 2); cx.stroke();
         break;
+      case 'pulse': // a beating heart-mark
+        var beat = 1 + Math.sin(t * 3) * 0.12;
+        cx.beginPath();
+        cx.moveTo(x, y + 5 * beat);
+        cx.bezierCurveTo(x - 8 * beat, y - 3 * beat, x - 5 * beat, y - 8 * beat, x, y - 3 * beat);
+        cx.bezierCurveTo(x + 5 * beat, y - 8 * beat, x + 8 * beat, y - 3 * beat, x, y + 5 * beat);
+        cx.stroke();
+        break;
     }
     cx.restore();
   }
@@ -447,6 +500,8 @@
       case 'hound': return 14 + 12 * s;
       case 'king': return 60 * s + 10;
       case 'librarian': return 58 * s + 10;
+      case 'hound': return 14 + 12 * s;
+      case 'auricle': return 52 * s + 12;
       default: return 40;
     }
   }
@@ -669,6 +724,35 @@
         cx.beginPath(); cx.moveTo(x - 6 * S, y + 6); cx.lineTo(x - 6 * S, y + 18 + Math.sin(t * 3) * 3); cx.stroke();
         break;
       }
+      case 'auricle': {
+        // an enormous ear of shell-pink flesh, pulsing with the Maw's heartbeat
+        var beat = 1 + Math.sin(t * 2.2) * 0.06;
+        F.glow(cx, x, y - 12 * S, 44 * S * beat, hsl(hue, 80, 45), 0.4 + 0.15 * Math.sin(t * 2.2));
+        cx.fillStyle = flash ? '#fff' : hsl(hue, 45, 32);
+        // outer ear spiral
+        cx.beginPath();
+        cx.ellipse(x, y - 10 * S, 30 * S * beat, 40 * S * beat, 0, 0, Math.PI * 2);
+        cx.fill();
+        cx.fillStyle = flash ? '#fff' : hsl(hue, 55, 22);
+        cx.beginPath();
+        cx.ellipse(x + 3 * S, y - 8 * S, 18 * S * beat, 26 * S * beat, 0, 0, Math.PI * 2);
+        cx.fill();
+        // inner canal — a dark listening hollow
+        cx.fillStyle = flash ? '#eee' : hsl(hue, 60, 12);
+        cx.beginPath();
+        cx.ellipse(x + 5 * S, y - 6 * S, 8 * S, 14 * S, 0, 0, Math.PI * 2);
+        cx.fill();
+        // the veins feeding it
+        cx.strokeStyle = hsl(hue, 70, 45); cx.lineWidth = 2;
+        for (var v2 = 0; v2 < 4; v2++) {
+          var va = Math.PI * 0.5 + v2 * 0.4;
+          cx.beginPath();
+          cx.moveTo(x - 24 * S, y - 10 * S);
+          cx.quadraticCurveTo(x - 36 * S, y + (v2 * 8 - 12) * S, x - 44 * S, y + (v2 * 6) * S);
+          cx.stroke();
+        }
+        break;
+      }
     }
     cx.restore();
   }
@@ -736,6 +820,12 @@
         p = enemyPos(fx.uid);
         F.floater(p.x, p.y - 56, '…', '#e8e0c8');
         break;
+      case 'status': {
+        p = fx.side === 'enemy' ? enemyPos(fx.uid) : delverPos(fx.who);
+        if (fx.kind === 'burn') F.burst(p.x, p.y - 12, '#ff9a3d', 8, 90);
+        else if (fx.kind === 'ward') { F.burst(p.x, p.y - 12, '#9db4d6', 12, 80); F.floater(p.x, p.y - 52, 'ward', '#9db4d6'); }
+        break;
+      }
     }
   });
 })();

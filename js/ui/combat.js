@@ -6,6 +6,21 @@
 
   UI.combatTarget = null;
 
+  function statusPips(s) {
+    if (!s) return '';
+    var out = '';
+    if (s.burn > 0) out += ' <span class="pip burn" title="Burning">🔥' + s.burn + '</span>';
+    if (s.chill > 0) out += ' <span class="pip chill" title="Chilled">❄' + s.chill + '</span>';
+    if (s.bleed > 0) out += ' <span class="pip bleed" title="Bleeding">🩸' + s.bleed + '</span>';
+    if (s.ward) out += ' <span class="pip ward" title="Warded">◈</span>';
+    return out;
+  }
+  var INTENT = { strike: '⚔', aoe: '↯ sweep', windup: '… winding', silence: '🤫 silence', index: '✎ index', reforge: '⚒ reforge', echo: '↺ echo', systole: '✊ clench' };
+  function intentGlyph(intent) {
+    if (!intent) return '';
+    return '<span class="sub" title="Next move">' + (INTENT[intent] || intent) + '</span>';
+  }
+
   UI.renderCombat = function (panel) {
     var st = G.state;
     var ex = st.expedition;
@@ -37,14 +52,14 @@
         onclick: dead ? null : function () { UI.combatTarget = e.uid; UI.refresh(); }
       });
       card.appendChild(h('div.row', {}, [
-        h('span.name', { text: e.name }),
-        h('span.sub', { text: dead ? 'destroyed' : (sel ? '◎ target' : '') })
+        h('span.name', { html: e.name + statusPips(e.status) }),
+        h('span.sub', { html: dead ? 'destroyed' : (intentGlyph(e.intent) + (sel ? ' ◎' : '')) })
       ]));
       if (!dead) {
         var bar = h('div.bar');
         bar.appendChild(h('i', { style: 'width:' + Math.round(100 * e.hp / e.maxHp) + '%;background:linear-gradient(90deg,#a24d42,#e06a5a)' }));
         card.appendChild(bar);
-        card.appendChild(h('div.sub', { text: e.hp + '/' + e.maxHp + (e.special === 'slow' ? ' · slow but heavy' : e.special === 'tithe' ? ' · collects marks' : e.special === 'lowest' ? ' · hunts the weak' : '') }));
+        card.appendChild(h('div.sub', { text: e.hp + '/' + e.maxHp + (e.special === 'slow' ? ' · slow but heavy' : e.special === 'tithe' ? ' · collects marks' : e.special === 'lowest' ? ' · hunts the weak' : e.special === 'drain' ? ' · drinks wounds' : e.special === 'bleed' ? ' · opens wounds' : e.special === 'chill' ? ' · chilling' : e.special === 'want' ? ' · sings longing' : '') }));
       }
       panel.appendChild(card);
     });
@@ -55,8 +70,9 @@
       var mhp = G.Delvers.maxHp(d);
       var active = c.awaiting === d.id;
       var card = h('div.card' + (active ? '.selected' : ''));
+      var ds = c.dstat && c.dstat[d.id];
       card.appendChild(h('div.row', {}, [
-        h('span.name', { text: (active ? '▶ ' : '') + d.name }),
+        h('span.name', { html: (active ? '▶ ' : '') + d.name + statusPips(ds) }),
         h('span.sub', { text: G.Delvers.cls(d).name + (c.shaken[d.id] ? ' · shaken' : '') + (c.guarding[d.id] ? ' · guarding' : '') + (c.taunt[d.id] ? ' · taunting' : '') })
       ]));
       var bar = h('div.bar.hp');
@@ -95,9 +111,18 @@
           act({ type: 'item', target: low.id });
         }
       }));
+      // v4: companion beast ability, once per fight
+      var bdef = G.Beasts && G.Beasts.activeDef();
+      if (bdef) {
+        acts.appendChild(h('button', {
+          disabled: c.beastUsed,
+          html: '🐾 <b>' + bdef.active.name + '</b><br><span class="sub">' + (c.beastUsed ? 'used' : bdef.name + ' — ' + UI.esc(bdef.active.desc)) + '</span>',
+          onclick: function () { act({ type: 'beast', target: UI.combatTarget }); }
+        }));
+      }
       acts.appendChild(h('button.danger', {
         html: '🏃 <b>Flee</b><br><span class="sub">drop some loot; Scouts flee best</span>',
-        style: 'grid-column:1/3',
+        style: bdef ? '' : 'grid-column:1/3',
         onclick: function () { act({ type: 'flee' }); }
       }));
       panel.appendChild(acts);

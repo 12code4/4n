@@ -16,10 +16,12 @@ var FILES = [
   'js/data/buildings.js', 'js/data/gear.js', 'js/data/contracts.js', 'js/data/emberdeep.js',
   'js/data/archive.js', 'js/data/renown.js', 'js/data/relics.js', 'js/data/talents.js',
   'js/data/achievements.js', 'js/data/rivals.js',
+  'js/data/moods.js', 'js/data/omens.js', 'js/data/veins.js', 'js/data/beasts.js', 'js/data/legacy.js',
   'js/migrations.js',
   'js/systems/state.js', 'js/systems/delvers.js', 'js/systems/economy.js',
   'js/systems/forge.js', 'js/systems/contracts.js',
   'js/systems/renown.js', 'js/systems/relics.js', 'js/systems/rivals.js', 'js/systems/quests.js',
+  'js/systems/moods.js', 'js/systems/omens.js', 'js/systems/beasts.js', 'js/systems/prestige.js',
   'js/systems/expedition.js', 'js/systems/combat.js'
 ];
 FILES.forEach(function (f) {
@@ -439,7 +441,7 @@ section('v2.0 Save migration v1 → v2');
   G.state = migrated;
   var s = G.serialize();
   var pay2 = JSON.parse(s);
-  ok(pay2.sv === 3, 'serialized at save-version 3');
+  ok(pay2.sv === 4, 'serialized at save-version 4 (full migration chain)');
 })();
 
 section('v2.0 Emberdeep: reach and fight the Smelted King');
@@ -667,7 +669,183 @@ section('v3.0 Save migration v2 → v3');
   migrated.delvers.forEach(function (d) { ok(Array.isArray(d.talents) && typeof d.face === 'number', 'migration adds talents+face'); });
   ok(migrated.graveyard[0].honored === false, 'migration adds honored flag to graves');
   G.state = migrated;
-  ok(JSON.parse(G.serialize()).sv === 3, 'serializes at v3');
+  ok(JSON.parse(G.serialize()).sv === 4, 'serializes at v4 (full migration chain)');
+})();
+
+/* ---------------- v4.0: moods, omens, status, veins, beasts, prestige ---------------- */
+section('v4.0 Moods: roll, couple market & runs');
+(function () {
+  G.newGame(4001);
+  var st = G.state;
+  ok(st.mood && G.Moods.current(), 'a mood exists from game start');
+  // force each mood and check market coupling
+  st.mood = { id: 'holding', until: st.day + 3 };
+  var pHolding = G.Economy.price('ember_glass');
+  st.mood = { id: 'generous', until: st.day + 3 };
+  var pGenerous = G.Economy.price('ember_glass');
+  ok(pHolding > pGenerous, 'Holding-Breath prices exceed Generous prices (' + pHolding + ' > ' + pGenerous + ')');
+  // mood ticks over on schedule
+  st.mood = { id: 'restless', until: st.day + 1 };
+  var before = st.mood.id;
+  G.Economy.endDay(); // day advances past until → reroll
+  ok(st.mood.id !== before || st.mood.until > st.day, 'mood rerolled or extended after expiry');
+})();
+
+section('v4.0 Omens: offer, choose ≤2, apply on run');
+(function () {
+  G.newGame(4002);
+  var st = G.state;
+  var offer = G.Omens.offer();
+  ok(offer.length >= 2, 'offers at least two omens');
+  G.Omens.toggle(offer[0]); G.Omens.toggle(offer[1]);
+  ok(st.omenChosen.length === 2, 'two omens chosen');
+  G.Omens.toggle(offer[0]); // third would exceed — re-toggle removes
+  ok(st.omenChosen.length === 1, 'toggling removes a chosen omen');
+  // force known omens and verify effect on a launched run
+  st.omenChosen = ['open_hand']; // +30% loot, +1 enemy dmg
+  var guard = 0;
+  while (G.Delvers.roster().length < 2 && guard++ < 20) { if (!st.tavernPool.length) G.Delvers.refreshPool(true); }
+  G.Economy.buySupply('torches', 6); G.Economy.buySupply('rations', 6);
+  G.Exp.launch(G.Delvers.roster().slice(0, 2).map(function (d) { return d.id; }), 1);
+  ok(G.Exp.team().length >= 1 && st.expedition.omens.indexOf('open_hand') >= 0, 'omen locked onto the expedition');
+  ok(G.Omens.has('open_hand'), 'omen active during run');
+  G.Exp.surface();
+})();
+
+section('v4.0 Status effects: burn/chill/bleed/ward in combat');
+(function () {
+  G.newGame(4003);
+  var st = G.state;
+  var guard = 0;
+  while (G.Delvers.roster().length < 2 && guard++ < 20) {}
+  G.Economy.buySupply('torches', 6); G.Economy.buySupply('rations', 6);
+  G.Exp.launch(G.Delvers.roster().slice(0, 2).map(function (d) { return d.id; }), 1);
+  G.Combat.start(['hollow_shambler'], {});
+  var c = st.expedition.combat;
+  var e = c.enemies[0];
+  var hp0 = e.hp;
+  G.Combat.applyStatus(e, 'burn', 2);
+  ok(e.status.burn === 2, 'burn applied');
+  ok(!G.Combat.tickEnemyStatus(e) === false, 'tick returns alive'); // just exercise
+  ok(e.hp < hp0, 'burn dealt damage on tick');
+  // ward absorbs a blow
+  G.Combat.applyStatus(e, 'ward', 0);
+  var hpW = e.hp;
+  G.Combat.damageEnemy(e, 99, null, false, 'test');
+  ok(e.hp === hpW, 'ward absorbed the blow entirely');
+  ok(!e.status.ward, 'ward cleared after absorbing');
+  // delver ward
+  var d = G.Exp.team()[0];
+  G.Combat.applyStatus(d.id, 'ward', 0);
+  var dhp = d.hp;
+  var dealt = G.Combat.damageDelver(d, 50, e, false);
+  ok(d.hp === dhp && dealt === 0, 'delver ward ate the blow');
+  st.expedition = null;
+})();
+
+section('v4.0 Veins: reach and fight the Auricle');
+(function () {
+  var kills = 0, exceptions = 0, reached = 0;
+  for (var run = 0; run < 40; run++) {
+    G.newGame(4100 + run);
+    var st = G.state;
+    st.marks = 1400;
+    st.mood = { id: 'generous', until: 9999 }; // stable, kind mood for a fair test
+    st.guardiansSlain.gullet = true; st.guardiansSlain.emberdeep = true; st.guardiansSlain.archive = true;
+    st.unlockedStart = 10; st.stats.deepest = 10;
+    ['tavern', 'infirmary', 'forge', 'charterhall', 'menagerie'].forEach(function (b) { G.Economy.build(b); });
+    var guard = 0;
+    while (G.Delvers.roster().length < 3 && guard++ < 20) { if (!st.tavernPool.length) G.Delvers.refreshPool(true); G.Delvers.hire(0); }
+    // a real depth-12 roster is battle-hardened — level them to ~L9
+    G.Delvers.roster().forEach(function (d) { while (d.lvl < 9) G.Delvers.gainXp(d, 3000); });
+    // top gear
+    st.inventory.vel_shard = 8; st.inventory.slag_iron = 12; st.inventory.forge_salt = 8; st.inventory.hollow_pearl = 6; st.inventory.grave_iron = 12;
+    G.Forge.craft('vel_edge'); G.Forge.craft('warden_mail'); G.Forge.craft('vel_edge');
+    G.Delvers.roster().forEach(function (d, i) { if (st.armory[i]) G.Forge.equip(st.armory[i].uid, d.id); });
+    G.Economy.buySupply('torches', 50); G.Economy.buySupply('rations', 50); G.Economy.buySupply('bandages', 10);
+    G.Exp.launch(G.Delvers.roster().slice(0, 3).map(function (d) { return d.id; }), 10);
+    var steps = 0;
+    try {
+      while (st.expedition && steps++ < 6000) {
+        var ex = st.expedition;
+        if (ex.mode === 'map') {
+          var cs = G.Exp.nextChoices(); if (!cs.length) break;
+          var pick = cs.filter(function (n) { return n.type === 'guardian'; })[0] || cs.filter(function (n) { return n.type === 'shaft'; })[0] || cs.filter(function (n) { return n.type === 'pulse' || n.type === 'rest' || n.type === 'cache'; })[0] || G.rpick(cs);
+          G.Exp.move(pick.id);
+        } else if (ex.mode === 'combat') {
+          var actor = G.Combat.actor(); if (!actor) break;
+          var c = ex.combat; var sk = G.Delvers.cls(actor).skill;
+          if (actor.hp < G.Delvers.maxHp(actor) * 0.4 && ex.bandages > 0) G.Combat.act({ type: 'item', target: actor.id });
+          else if (c.grit >= sk.cost) G.Combat.act({ type: 'skill' });
+          else G.Combat.act({ type: 'strike' });
+        } else if (ex.mode === 'event') {
+          if (ex.event.stage === 'choose') { var def = G.Exp.eventDef(); var av = []; def.choices.forEach(function (ch, i) { if (G.Exp.choiceAvailable(ch)) av.push(i); }); G.Exp.chooseEvent(av[av.length - 1]); } else G.Exp.closeEvent();
+        } else if (ex.mode === 'peddler') G.Exp.leavePeddler();
+        else if (ex.mode === 'rival') { if (G.rchance(0.5)) G.Exp.rivalBrawl(); else G.Exp.leaveRival(); }
+        else if (ex.mode === 'shaft') { if (G.Exp.canDescend()) G.Exp.descend(); else G.Exp.surface(); }
+        else if (ex.mode === 'guardian') G.Exp.fightGuardian();
+        else if (ex.mode === 'guardian_won') { kills++; G.Exp.surface(); }
+        else break;
+      }
+    } catch (e) { exceptions++; console.error('  ✗ veins exception: ' + (e && e.stack || e)); }
+    ok(steps < 6000, 'veins run terminates');
+    ok(!st.expedition, 'veins run cleaned up');
+    if (st.stats.deepest >= 12) reached++;
+  }
+  ok(exceptions === 0, exceptions + ' exceptions in veins runs');
+  ok(kills > 0, 'the Auricle is beatable (' + kills + ' kills / 40)');
+  console.log('  » ' + reached + '/40 reached depth 12, Auricle down ' + kills + '×');
+})();
+
+section('v4.0 Beasts: rescue, capacity, and active ability');
+(function () {
+  G.newGame(4200);
+  var st = G.state;
+  st.marks = 3000;
+  ok(!G.Beasts.rescue('pulse_pup'), 'cannot rescue with no Menagerie');
+  G.Economy.build('menagerie'); // L1 → capacity 2
+  ok(G.Beasts.rescue('pulse_pup'), 'rescue into L1 menagerie');
+  ok(G.Beasts.rescue('cinder_whelp'), 'rescue a second');
+  ok(!G.Beasts.rescue('glass_fledgling'), 'third blocked at capacity 2');
+  G.Beasts.setActive('pulse_pup');
+  ok(st.beasts.active === 'pulse_pup', 'active beast set');
+  // active ability fires once in combat
+  var guard = 0; while (G.Delvers.roster().length < 2 && guard++ < 20) {}
+  G.Economy.buySupply('torches', 6); G.Economy.buySupply('rations', 6);
+  G.Exp.launch(G.Delvers.roster().slice(0, 2).map(function (d) { return d.id; }), 1);
+  ok(st.expedition.beast === 'pulse_pup', 'beast locked onto run');
+  G.Combat.start(['hollow_shambler', 'gravemite'], {});
+  var c = st.expedition.combat;
+  var actor = G.Combat.actor();
+  var e0 = c.enemies[0]; var hp0 = e0.hp;
+  var r = G.Combat.act({ type: 'beast', target: e0.uid });
+  ok(c.beastUsed, 'beast ability consumed');
+  ok(e0.hp < hp0, 'pulse pup bite dealt damage');
+  var r2 = G.Combat.act({ type: 'beast', target: e0.uid });
+  ok(!r2.ok, 'beast ability only once per fight');
+  st.expedition = null;
+})();
+
+section('v4.0 Prestige: retire value & perk purchase');
+(function () {
+  G.newGame(4300);
+  var st = G.state;
+  st.renown = 240; st.stats.deepest = 9; st.stats.earned = 12000; st.guardiansSlain = { gullet: true, emberdeep: true };
+  st.achievements = ['a','b','c','d','e','f','g','h','i','j','k'];
+  var val = G.Prestige.retireValue();
+  ok(val >= 5, 'retire yields a healthy Legacy Mark sum (' + val + ')');
+  // buy a perk with banked marks (simulate a bank without touching localStorage retire flow)
+  st.legacy.marks = 10;
+  var r = G.Prestige.buyPerk('nest_egg');
+  ok(r.ok, 'buy nest_egg perk');
+  ok(G.Prestige.hasPerk('nest_egg'), 'perk recorded');
+  ok(st.legacy.marks === 9, 'perk cost deducted');
+  ok(!G.Prestige.buyPerk('nest_egg').ok, 'cannot buy the same perk twice');
+  // fx flows into a fresh charter (nest_egg = +60 start marks)
+  var baseline = G.BAL.startMarks;
+  // applyLegacy reads from Prestige.loadLegacy (localStorage) which is empty in node,
+  // so simulate by checking the fx function directly reflects the bought perk
+  ok(G.Prestige.fx('startMarks') === 60, 'nest_egg fx grants +60 start marks');
 })();
 
 /* ---------------- regression: guardian flee must not strand the team ---------------- */

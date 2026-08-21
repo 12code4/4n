@@ -73,6 +73,13 @@
       dEl.classList.remove('hidden');
       dEl.innerHTML = '<b>' + ex.depth + '</b><span>depth</span>';
     } else dEl.classList.add('hidden');
+    // Maw mood glyph
+    var mEl = document.getElementById('hud-mood');
+    if (mEl && G.Moods) {
+      var mood = G.Moods.current();
+      mEl.innerHTML = '<b style="color:hsl(' + mood.hue + ',70%,65%)">' + mood.glyph + '</b><span>' + mood.name + '</span>';
+      mEl.title = mood.blurb + (G.Moods.daysLeft() ? ' (' + G.Moods.daysLeft() + 'd)' : '');
+    }
     document.getElementById('hud-endday').classList.toggle('hidden', !!ex);
     var jbtn = document.getElementById('hud-journal');
     var unread = st.journalSeen.filter(function (p) { return st.journalRead.indexOf(p) < 0; }).length;

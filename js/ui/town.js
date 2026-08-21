@@ -201,7 +201,7 @@
     G.DATA.buildingList().forEach(function (b) {
       var lvl = st.buildings[b.id] || 0;
       var maxed = lvl >= b.costs.length;
-      var cost = maxed ? null : b.costs[lvl];
+      var cost = maxed ? null : G.Economy.buildCost(b.id, lvl);
       var card = h('div.card');
       card.appendChild(h('div.row', {}, [
         h('span.name', { text: b.name }),
@@ -282,6 +282,40 @@
     });
     panel.appendChild(buyRow);
     panel.appendChild(h('p.sub', { text: 'Rule of thumb: a torch per passage, a ration per delver per depth.', style: 'margin-top:4px' }));
+
+    // v4: the Maw's mood for this outfitting
+    if (G.Moods) {
+      var mood = G.Moods.current();
+      panel.appendChild(h('div.bark', { html: '<b>The Maw is ' + mood.name + '.</b> ' + UI.esc(mood.blurb) }));
+    }
+
+    // v4: companion beast for the run
+    if (G.bld('menagerie') && G.Beasts.owned().length) {
+      panel.appendChild(h('h3', { text: 'Companion' }));
+      var brow = h('div.row', { style: 'gap:4px;justify-content:flex-start;flex-wrap:wrap' });
+      brow.appendChild(h('button' + (!st.beasts.active ? '.primary' : ''), { text: 'None', onclick: function () { G.Beasts.setActive(null); UI.refresh(); } }));
+      G.Beasts.owned().forEach(function (id) {
+        var bd = G.DATA.beasts[id];
+        brow.appendChild(h('button' + (st.beasts.active === id ? '.primary' : ''), { title: bd.desc + ' — ' + bd.active.desc, text: bd.name, onclick: function () { G.Beasts.setActive(id); UI.refresh(); } }));
+      });
+      panel.appendChild(brow);
+    }
+
+    // v4: omens — choose up to two
+    if (G.Omens) {
+      if (!st.omenOffer) G.Omens.offer();
+      panel.appendChild(h('h3', { text: 'Omens (choose up to 2)' }));
+      st.omenOffer.forEach(function (id) {
+        var o = G.DATA.omenById(id);
+        var on = (st.omenChosen || []).indexOf(id) >= 0;
+        var kindColor = o.kind === 'blessed' ? 'var(--good)' : o.kind === 'cursed' ? 'var(--bad)' : 'var(--brass)';
+        panel.appendChild(h('div.card' + (on ? '.selected' : ''), { onclick: function () { G.Omens.toggle(id); UI.refresh(); }, style: 'cursor:pointer' }, [
+          h('div.row', {}, [h('span.name', { text: (on ? '◈ ' : '') + o.name }), h('span.sub', { text: o.kind, style: 'color:' + kindColor })]),
+          h('p.sub', { text: o.desc, style: 'margin-top:2px' })
+        ]));
+      });
+      panel.appendChild(h('button.small', { text: '↻ Re-read the omens', onclick: function () { G.Omens.offer(); UI.refresh(); } }));
+    }
 
     panel.appendChild(h('hr.divider'));
     var err = G.Exp.canLaunch(UI.sel.team, UI.sel.depth);

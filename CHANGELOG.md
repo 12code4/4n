@@ -1,5 +1,53 @@
 # Changelog — The Gilded Maw
 
+## v4.0 — "The Living Maw"
+
+The Maw stops being a place and becomes a counterparty — with moods, appetites,
+and a pulse. The design pillar made literal: the market's weather and the
+dungeon's weather are the same weather.
+
+### Moods
+- One **mood** at a time (Generous, Restless, Hungry, Holding Its Breath,
+  Dreaming), lasting a few days, shown on the HUD and driving **both** the
+  market (prices flood or starve, drift widens or calms) **and** the descent
+  (more fights or more wonders, richer or thinner loot, hungrier dark). Forecast
+  it with a Charter Hall or a legacy perk.
+
+### Omens
+- At outfitting, choose up to two **omens** — blessed, cursed, or mixed — that
+  reshape the whole run: +loot for +enemy damage, a quiet stair with no guardian
+  (and no rewards), no rest but +2 starting Grit, weapons that set fire, and more.
+
+### Combat, alive
+- **Status effects**: Burn, Chill, Bleed, and Ward, applied by enemies, omens
+  and beasts and shown as pips on both sides.
+- **Telegraphed intents**: every enemy shows its next move, turning Guard and
+  taunt into real reads.
+
+### The Veins (depths 10–12)
+- Living tunnels that beat; a crimson, pulsing biome. 4 materials, a heartbeat
+  **pulse** node, 6 enemies (a leech that drinks wounds, a knight that bleeds
+  you, a chorus that makes delvers skip their turn…), and the guardian
+  **The Auricle** — the Maw's ear, which **echoes your own favourite move back
+  at you, amplified**. Journal pages 10–12: the story's turn.
+
+### Companion beasts
+- The **Menagerie** houses creatures you rescue below. Take one per expedition
+  for an always-on passive and a once-per-fight ability (Bite, Scorch, Shriek,
+  Mend, Fetch, a protective Stand).
+
+### Charter Renewal (prestige)
+- Retire a charter to bank **Legacy Marks** and start fresh, inheriting a
+  permanent perk tree (start gold, a founding crew, a pre-built forge, mood
+  foresight, cheaper building, Maren's Chalk, a kept beast…). The colours
+  outlive the ledger.
+
+### Under the hood
+- Save migration v3 → v4. Town skyline breathes with the mood; new art
+  (the Auricle, Menagerie, Charter Hall, status/intent UI). New tests: mood
+  market coupling, omen locking, status mechanics, 40 Auricle runs, beast
+  abilities, prestige math. Full suite: 25k+ checks.
+
 ## v3.0 — "Rivals & Renown"
 
 You are not the only charter delving the Maw — and the valley is starting to

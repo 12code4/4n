@@ -16,18 +16,90 @@
     }
     // sub-nav
     var subs = [['standings', 'Standings'], ['relics', 'Relics'], ['quests', 'Townsfolk'], ['memorial', 'Memorial'], ['achieve', 'Deeds']];
+    if (G.bld('menagerie')) subs.push(['beasts', 'Menagerie']);
+    subs.push(['renewal', 'Renewal']);
     var nav = h('div.tabs');
     subs.forEach(function (s) {
       nav.appendChild(h('button' + (UI.hallSection === s[0] ? '.active' : ''), { text: s[1], onclick: function () { UI.hallSection = s[0]; UI.refresh(); } }));
     });
     panel.appendChild(nav);
 
+    // guard against a vanished section
+    var validSec = { standings: 1, relics: 1, quests: 1, memorial: 1, achieve: 1, renewal: 1 };
+    if (G.bld('menagerie')) validSec.beasts = 1;
+    if (!validSec[UI.hallSection]) UI.hallSection = 'standings';
+
     if (UI.hallSection === 'standings') renderStandings(panel);
     else if (UI.hallSection === 'relics') renderRelics(panel);
     else if (UI.hallSection === 'quests') renderQuests(panel);
     else if (UI.hallSection === 'memorial') renderMemorial(panel);
+    else if (UI.hallSection === 'beasts') renderBeasts(panel);
+    else if (UI.hallSection === 'renewal') renderRenewal(panel);
     else renderAchieve(panel);
   };
+
+  function renderBeasts(panel) {
+    var st = G.state;
+    panel.appendChild(h('p.sub', { text: 'The Menagerie keeps the things the Maw orphans. ' + G.Beasts.owned().length + '/' + G.Beasts.capacity() + ' housed. Pick one to ride along at outfitting.' }));
+    if (!G.Beasts.owned().length) { panel.appendChild(h('p', { text: 'No beasts yet. Some deep events let you bring one home — if you have the room.' })); return; }
+    G.Beasts.owned().forEach(function (id) {
+      var bd = G.DATA.beasts[id];
+      var active = st.beasts.active === id;
+      var card = h('div.card' + (active ? '.selected' : ''));
+      card.appendChild(h('div.row', {}, [h('span.name', { text: bd.name }), h('span.sub', { text: active ? '◈ chosen' : '' })]));
+      card.appendChild(h('p.sub', { text: bd.desc, style: 'margin:3px 0' }));
+      card.appendChild(h('p.sub', { html: '<b>Passive:</b> ' + passiveText(bd.passive) + ' · <b>' + bd.active.name + ':</b> ' + bd.active.desc }));
+      var row = h('div.row', { style: 'gap:4px;justify-content:flex-start;margin-top:4px' });
+      row.appendChild(h('button.small' + (active ? '' : '.primary'), { text: active ? 'Chosen' : 'Choose', disabled: active, onclick: function () { G.Beasts.setActive(id); UI.refresh(); } }));
+      row.appendChild(h('button.small', { text: 'Release', onclick: function () { G.Beasts.release(id); UI.refresh(); } }));
+      card.appendChild(row);
+      panel.appendChild(card);
+    });
+  }
+  function passiveText(p) {
+    var b = [];
+    if (p.dmg) b.push('+' + p.dmg + ' party damage');
+    if (p.loot) b.push('+' + Math.round((p.loot - 1) * 100) + '% loot');
+    if (p.flee) b.push('+' + Math.round(p.flee * 100) + '% flee');
+    if (p.grit) b.push('+' + p.grit + ' start Grit');
+    if (p.heal) b.push('+' + Math.round((p.heal - 1) * 100) + '% healing');
+    if (p.scout) b.push('reads the dark ahead');
+    return b.join(', ') || 'none';
+  }
+
+  function renderRenewal(panel) {
+    var st = G.state;
+    var leg = st.legacy || { marks: 0, perks: [] };
+    panel.appendChild(h('div.card', {}, [
+      h('div.row', {}, [h('span.name', { text: 'Legacy Marks' }), h('span.sub', { text: (leg.marks || 0) + ' banked · ' + (leg.charters || 0) + ' charters' })]),
+      h('p.sub', { text: 'Retiring the charter banks Legacy Marks and starts a fresh company that inherits the store below — the colours outlive the ledger.' })
+    ]));
+    panel.appendChild(h('div.card', { style: 'border-color:var(--brass)' }, [
+      h('p', { html: 'Retiring now would bank <b>' + G.Prestige.retireValue() + '</b> Legacy Marks.' }),
+      h('button.danger', {
+        text: 'Renew the Charter', style: 'width:100%',
+        onclick: function () {
+          UI.modal(function (m) {
+            m.appendChild(h('h2', { text: 'Renew the Charter?' }));
+            m.appendChild(h('p', { text: 'The company, roster, buildings and graves stay behind. You bank ' + G.Prestige.retireValue() + ' Legacy Marks and begin a fresh charter — keeping every Legacy perk you have bought.' }));
+            m.appendChild(h('div.btnrow', {}, [
+              h('button.danger', { text: 'Renew', onclick: function () { G.Prestige.retire(); UI.closeModal(); UI.townTab = 'company'; UI.refresh(); } }),
+              h('button', { text: 'Not yet', onclick: UI.closeModal })
+            ]));
+          });
+        }
+      })
+    ]));
+    panel.appendChild(h('h3', { text: 'Legacy Perks (permanent)' }));
+    G.DATA.legacyPerks.forEach(function (p) {
+      var owned = G.Prestige.hasPerk(p.id);
+      var card = h('div.card' + (owned ? '.selected' : ''));
+      card.appendChild(h('div.row', {}, [h('span.name', { text: p.name }), h('span.sub', { text: owned ? 'earned' : p.cost + ' LM' })]));
+      card.appendChild(h('p.sub', { text: p.desc, style: 'margin:3px 0' }));
+      if (!owned) card.appendChild(h('button.small.primary', { text: 'Buy (' + p.cost + ' LM)', disabled: leg.marks < p.cost, onclick: function () { var r = G.Prestige.buyPerk(p.id); if (!r.ok) UI.toast(r.msg, 'bad'); UI.refresh(); } }));
+      panel.appendChild(card);
+    });
+  }
 
   function renderStandings(panel) {
     var st = G.state;

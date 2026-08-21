@@ -4,7 +4,9 @@
   var C = (G.Contracts = {});
 
   C.slots = function () {
-    return G.bldFx('contracts', 'slots', 0) + ((G.Renown && G.Renown.hasPerk('contract1')) ? 1 : 0);
+    return G.bldFx('contracts', 'slots', 0)
+      + ((G.Renown && G.Renown.hasPerk('contract1')) ? 1 : 0)
+      + ((G.Prestige && G.Prestige.fx('contractSlot')) || 0); // Standing Ledger legacy perk
   };
 
   /* materials the player can plausibly source: biomes up to the deepest reached/unlocked */

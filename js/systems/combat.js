@@ -14,6 +14,45 @@
   function relMult(k) { return G.Relics ? G.Relics.mult(k) : 1; }
   function relFlag(k) { return G.Relics ? G.Relics.flag(k) : false; }
   function talent(d, id) { return G.Delvers.hasTalent(d, id); }
+  /* null-safe v4.0 accessors */
+  function omenMult(k) { return G.Omens ? G.Omens.mult(k) : 1; }
+  function omenAdd(k) { return G.Omens ? G.Omens.add(k) : 0; }
+  function omenFlag(k) { return G.Omens ? G.Omens.flag(k) : false; }
+  function moodEnemy() { return G.Moods ? G.Moods.fx('enemy', 1) : 1; }
+  function beastPassive(k, base) { return G.Beasts ? G.Beasts.passive(k, base) : base; }
+  function healScale() { return omenMult('healBonus') * (G.Beasts ? G.Beasts.passive('heal', 1) : 1); }
+
+  /* ---------- status effects (v4.0) ---------- */
+  function estatus(e) { if (!e.status) e.status = { burn: 0, chill: 0, bleed: 0, ward: false }; return e.status; }
+  C.dstatus = function (id) {
+    var c = C.cur();
+    if (!c.dstat) c.dstat = {};
+    if (!c.dstat[id]) c.dstat[id] = { burn: 0, chill: 0, bleed: 0, ward: false };
+    return c.dstat[id];
+  };
+  /* apply a status. target: enemy object, or delver-id string. */
+  C.applyStatus = function (target, kind, turns) {
+    var s = (typeof target === 'string') ? C.dstatus(target) : estatus(target);
+    if (kind === 'ward') s.ward = true;
+    else s[kind] = Math.max(s[kind] || 0, turns);
+  };
+  /* tick burn/bleed damage + decay at the start of a turn. returns false if the
+   * unit died to the status. */
+  C.tickEnemyStatus = function (e) {
+    var s = estatus(e);
+    if (s.burn > 0) { e.hp -= 3; s.burn--; G.Exp.elog(e.name + ' burns (−3).', 'bad'); G.emit('fx', { t: 'status', side: 'enemy', uid: e.uid, kind: 'burn' }); }
+    if (s.bleed > 0) { e.hp -= 2; s.bleed--; }
+    if (s.chill > 0) s.chill--;
+    if (e.hp <= 0) { e.hp = 0; C.onEnemyDeath(e, null); return false; }
+    return true;
+  };
+  C.tickDelverStatus = function (d) {
+    var s = C.dstatus(d.id);
+    if (s.burn > 0) { d.hp = Math.max(1, d.hp - 3); s.burn--; }
+    if (s.bleed > 0) { d.hp = Math.max(1, d.hp - 2); s.bleed--; }
+    if (s.chill > 0) s.chill--;
+  };
+  function chilled(unitStatus) { return unitStatus && unitStatus.chill > 0; }
   /* does the team field a class with a given passive right now? */
   C.teamPassive = function (name) {
     var team = G.Exp.team();
@@ -30,23 +69,28 @@
     var s = C.scale(depth);
     var enemies = groupIds.map(function (id, i) {
       var def = G.DATA.enemies[id];
-      var hp = Math.round(def.hp * (def.boss ? 1 : s));
+      // mood + omen enemy scaling (the Living Maw makes the deep meaner or milder)
+      var eScale = (def.boss ? 1 : s) * moodEnemy() * omenMult('enemyHp');
+      var hp = Math.max(1, Math.round(def.hp * eScale));
       var relSpd = relAdd('enemySpd');
+      var dmgBonus = omenAdd('enemyDmg');
       return {
         uid: 'e' + i + '_' + id, id: id, name: def.name,
         hp: hp, maxHp: hp,
-        dmg: [Math.round(def.dmg[0] * s), Math.round(def.dmg[1] * s)],
+        dmg: [Math.round(def.dmg[0] * s * moodEnemy()) + dmgBonus, Math.round(def.dmg[1] * s * moodEnemy()) + dmgBonus],
         spd: def.spd + relSpd, crit: def.crit || 0.05,
         special: def.special || null, boss: !!def.boss,
         rotIdx: 0, look: def.look, tags: def.tags || [], nonlethal: !!def.nonlethal,
-        indexed: false
+        indexed: false, status: { burn: 0, chill: 0, bleed: 0, ward: false }, intent: null
       };
     });
     ex.mode = 'combat';
-    // starting grit: base + best gritStart trinket on the team + still_point talent + relic bell
-    var startGrit = G.BAL.gritStart + relAdd('gritStart');
+    // lock in the expedition's chosen beast for the whole run
+    if (ex.beast === undefined) ex.beast = (G.state.beasts && G.state.beasts.active) || null;
+    // starting grit: base + best gritStart trinket + still_point talent + relic bell + omen + beast
+    var startGrit = G.BAL.gritStart + relAdd('gritStart') + omenAdd('gritStart') + beastPassive('grit', 0);
     G.Exp.team().forEach(function (d) {
-      var g = G.BAL.gritStart + gFx(d, 'gritStart') + relAdd('gritStart') + (talent(d, 'still_point') ? 1 : 0);
+      var g = G.BAL.gritStart + gFx(d, 'gritStart') + relAdd('gritStart') + omenAdd('gritStart') + beastPassive('grit', 0) + (talent(d, 'still_point') ? 1 : 0);
       startGrit = Math.max(startGrit, g);
     });
     ex.combat = {
@@ -55,8 +99,11 @@
       guardian: !!opts.guardian, firstStrike: !!opts.firstStrike,
       brawl: !!opts.brawl, rivalId: opts.rivalId || null,
       guarding: {}, taunt: {}, shaken: {}, fledFail: false,
-      reforged: 0, downed: {}, vanished: {}, revivified: false, unbroken: {}
+      reforged: 0, downed: {}, vanished: {}, revivified: false, unbroken: {},
+      dstat: {}, skipNext: {}, actionCounts: {}, beastUsed: false, echoAcc: 0
     };
+    // omen of the ward: the team begins each fight warded against the first blow
+    if (omenFlag('wardStart')) G.Exp.team().forEach(function (d) { C.applyStatus(d.id, 'ward', true); });
     // fear check
     var tags = {};
     enemies.forEach(function (e) { e.tags.forEach(function (t) { tags[t] = true; }); });
@@ -104,6 +151,17 @@
     c.turn = -1;
     // tick taunts
     for (var k in c.taunt) { c.taunt[k]--; if (c.taunt[k] <= 0) delete c.taunt[k]; }
+    // compute enemy intents for the coming round (telegraphed to the UI)
+    c.enemies.forEach(function (e) { if (e.hp > 0) e.intent = C.enemyIntent(e); });
+  };
+
+  /* what the enemy means to do next round (for the UI to telegraph) */
+  C.enemyIntent = function (e) {
+    var c = C.cur();
+    if (e.special === 'slow' && (c.round + 1) % 2 === 0 && !e.boss) return 'windup';
+    if (e.special === 'gust' && (c.round + 1) % 3 === 0) return 'aoe';
+    if (e.boss) { var def = G.DATA.enemies[e.id]; return def.rotation[e.rotIdx % def.rotation.length]; }
+    return 'strike';
   };
 
   /* advance until a delver's turn or combat over */
@@ -117,6 +175,9 @@
       if (t.kind === 'delver') {
         var d = G.Delvers.get(t.id);
         if (!d || !d.alive || c.downed[d.id]) continue; // downed (brawl) delvers skip their turn
+        C.tickDelverStatus(d);                 // burn/bleed tick
+        if (!d.alive) continue;
+        if (c.skipNext[d.id]) { delete c.skipNext[d.id]; G.Exp.elog(d.name + ' stands lost in longing, and does nothing.', 'bad'); continue; }
         delete c.guarding[d.id]; // guard lasts until your next turn
         c.awaiting = t.id;
         G.emit('combat');
@@ -125,6 +186,7 @@
         var e = null;
         for (var i = 0; i < c.enemies.length; i++) if (c.enemies[i].uid === t.id) e = c.enemies[i];
         if (!e || e.hp <= 0) continue;
+        if (!C.tickEnemyStatus(e)) { if (C.checkEnd()) return; continue; } // died to burn/bleed
         C.enemyAct(e);
         if (C.checkEnd()) return;
       }
@@ -136,6 +198,9 @@
     return c && c.awaiting ? G.Delvers.get(c.awaiting) : null;
   };
 
+  /* self-chill: a chilled delver's blows land softer */
+  function selfChillMult(d) { return chilled(C.cur().dstat && C.cur().dstat[d.id]) ? 0.7 : 1; }
+
   /* ---------- delver actions ---------- */
   C.act = function (action) {
     var c = C.cur();
@@ -143,18 +208,20 @@
     if (!c || c.over || !d) return { ok: false };
     var ex = G.state.expedition;
     c.awaiting = null;
+    c.actionCounts[action.type] = (c.actionCounts[action.type] || 0) + 1; // the Auricle is listening
 
     switch (action.type) {
       case 'strike': {
         var e = C.enemyByUid(action.target) || C.firstLivingEnemy();
         if (!e) break;
-        var dmg = C.eff(d, 'might') + gAtk(d) + G.rint(0, 3);
-        dmg = Math.round(dmg * C.curseMult() * (talent(d, 'first_blood') && c.round === 1 ? 1.5 : 1));
+        var dmg = C.eff(d, 'might') + gAtk(d) + beastPassive('dmg', 0) + G.rint(0, 3);
+        dmg = Math.round(dmg * C.curseMult() * selfChillMult(d) * (talent(d, 'first_blood') && c.round === 1 ? 1.5 : 1));
         var critP = G.BAL.critBase + d.stats.luck * G.BAL.critPerLuck + gFx(d, 'crit');
         var crit = G.rchance(critP);
         var critMult = talent(d, 'assassinate') ? 2.25 : G.BAL.critMult;
         if (crit) dmg = Math.round(dmg * critMult);
         C.damageEnemy(e, dmg, d, crit);
+        if (e.hp > 0 && omenFlag('burnStrike')) { C.applyStatus(e, 'burn', 2); G.Exp.elog(e.name + ' catches fire.', 'bad'); }
         if (crit && talent(d, 'exploit') && e.hp > 0) C.damageEnemy(e, Math.round(dmg * 0.5), d, false, 'exploit');
         c.grit = Math.min(G.BAL.gritMax, c.grit + 1);
         break;
@@ -187,6 +254,9 @@
         var heal = G.rint(G.BAL.bandageHeal[0], G.BAL.bandageHeal[1]);
         if (C.teamPassive('bandage40')) heal = Math.round(heal * 1.4); // Alchemist on the line
         if (G.Exp.team().some(function (x) { return talent(x, 'deep_draught'); })) heal += 3;
+        heal = Math.round(heal * healScale()); // omen/beast healing bonuses
+        // a bandage staunches Bleed
+        var bs = C.dstatus(ally.id); if (bs.bleed > 0) bs.bleed = 0;
         ally.hp = Math.min(G.Delvers.maxHp(ally), ally.hp + heal);
         G.Exp.elog(d.name + ' bandages ' + (ally === d ? 'their wounds' : ally.name) + ' (+' + heal + ').', 'good');
         G.emit('fx', { t: 'heal', who: ally.id, amt: heal });
@@ -213,9 +283,55 @@
         c.fledFail = true;
         break;
       }
+      case 'beast': {
+        var bdef = G.Beasts && G.Beasts.activeDef();
+        if (!bdef || c.beastUsed) { c.awaiting = d.id; return { ok: false, msg: 'The beast has nothing left this fight.' }; }
+        c.beastUsed = true;
+        C.beastAbility(bdef, action.target);
+        break; // the beast acts on the delver's turn; the delver still passes
+      }
     }
     if (!C.checkEnd()) C.advance();
     return { ok: true };
+  };
+
+  C.beastAbility = function (bdef, targetUid) {
+    var c = C.cur(), ex = G.state.expedition;
+    var a = bdef.active;
+    var living = c.enemies.filter(function (e) { return e.hp > 0; });
+    switch (a.kind) {
+      case 'bite': {
+        var e = C.enemyByUid(targetUid) || living[0];
+        if (e) { G.Exp.elog(bdef.name + ' lunges — ' + a.name + '!', 'good'); C.damageEnemy(e, a.power, null, false, bdef.name); }
+        break;
+      }
+      case 'scorch': {
+        G.Exp.elog(bdef.name + ' breathes cinders across the line!', 'good');
+        living.forEach(function (e) { C.damageEnemy(e, a.power, null, false, bdef.name); if (e.hp > 0) C.applyStatus(e, 'burn', 2); });
+        break;
+      }
+      case 'shriek': {
+        G.Exp.elog(bdef.name + ' shrieks — the enemy freezes!', 'good');
+        living.forEach(function (e) { C.applyStatus(e, 'chill', 2); });
+        break;
+      }
+      case 'mend': {
+        G.Exp.elog(bdef.name + ' scatters healing dust over the team.', 'good');
+        G.Exp.team().forEach(function (d) { var h = Math.round(a.power * healScale()); d.hp = Math.min(G.Delvers.maxHp(d), d.hp + h); G.emit('fx', { t: 'heal', who: d.id, amt: h }); });
+        break;
+      }
+      case 'fetch': {
+        var val = a.power + ex.depth * 2;
+        G.Exp.grantLootValue(val); ex.marksFound += G.rint(2, 6);
+        G.Exp.elog(bdef.name + ' returns from the dark with loose marks and a find.', 'good');
+        break;
+      }
+      case 'guardbeast': {
+        G.Exp.elog(bdef.name + ' bristles — the team takes a ward.', 'good');
+        G.Exp.team().forEach(function (d) { C.applyStatus(d.id, 'ward', true); });
+        break;
+      }
+    }
   };
 
   C.useSkill = function (d, skill, targetUid) {
@@ -223,6 +339,7 @@
     if (skill.kind === 'heal') {
       var amt = skill.power(d) + (talent(d, 'stronger_brew') ? 3 : 0);
       if (talent(d, 'great_tonic')) amt = Math.round(amt * 1.5);
+      amt = Math.round(amt * healScale());
       // Revivify: bring back a teammate who fell this fight
       if (talent(d, 'revivify') && !c.revivified) {
         var fallen = G.state.expedition.team.map(G.Delvers.get).filter(function (x) { return x && !x.alive && c.diedThisFight && c.diedThisFight[x.id]; });
@@ -259,23 +376,25 @@
       low.hp = Math.min(G.Delvers.maxHp(low), low.hp + 4);
       G.emit('fx', { t: 'heal', who: low.id, amt: 4 });
     }
-    var empower = talent(d, 'empower') ? 1.4 : 1;
+    var empower = (talent(d, 'empower') ? 1.4 : 1) * selfChillMult(d);
     if (skill.target === 'allEnemies') {
-      var base = Math.round((skill.power(d) + gAtk(d) + (talent(d, 'wide_lance') ? 2 : 0)) * empower * C.curseMult());
+      var base = Math.round((skill.power(d) + gAtk(d) + beastPassive('dmg', 0) + (talent(d, 'wide_lance') ? 2 : 0)) * empower * C.curseMult());
       var living = c.enemies.filter(function (e) { return e.hp > 0; });
       var hitCount = living.length;
       living.forEach(function (e) {
         C.damageEnemy(e, base + G.rint(0, 2), d, false, skill.name);
+        if (e.hp > 0 && omenFlag('burnStrike')) C.applyStatus(e, 'burn', 2);
       });
       if (talent(d, 'siphon') && hitCount) { d.hp = Math.min(G.Delvers.maxHp(d), d.hp + hitCount); G.emit('fx', { t: 'heal', who: d.id, amt: hitCount }); }
     } else {
       var e = C.enemyByUid(targetUid) || C.firstLivingEnemy();
       if (!e) return;
-      var dmg = Math.round((skill.power(d) + gAtk(d) + G.rint(0, 3)) * empower * C.curseMult());
+      var dmg = Math.round((skill.power(d) + gAtk(d) + beastPassive('dmg', 0) + G.rint(0, 3)) * empower * C.curseMult());
       var critP = G.BAL.critBase + d.stats.luck * G.BAL.critPerLuck + (skill.critBonus || 0) + gFx(d, 'crit');
       var crit = G.rchance(critP);
       if (crit) dmg = Math.round(dmg * (talent(d, 'assassinate') ? 2.25 : G.BAL.critMult));
       C.damageEnemy(e, dmg, d, crit, skill.name);
+      if (e.hp > 0 && omenFlag('burnStrike')) { C.applyStatus(e, 'burn', 2); }
       if (crit && talent(d, 'exploit') && e.hp > 0) C.damageEnemy(e, Math.round(dmg * 0.5), d, false, 'exploit');
       if (skill.taunt) {
         c.taunt[d.id] = skill.taunt + (talent(d, 'iron_taunt') ? 2 : 1);
@@ -320,6 +439,9 @@
     var st = G.state, ex = st.expedition;
     // Custodian ward: brass hide flatly softens blows
     if (e.special === 'ward') dmg = Math.max(1, dmg - 3);
+    // status ward absorbs a blow entirely
+    var es = estatus(e);
+    if (es.ward) { es.ward = false; G.Exp.elog(e.name + '’s ward flares and eats the blow.', 'info'); G.emit('fx', { t: 'status', side: 'enemy', uid: e.uid, kind: 'ward' }); return; }
     e.hp -= dmg;
     G.Exp.elog((label ? label + ': ' : '') + (src ? src.name : '?') + ' hits ' + e.name + ' for ' + dmg + (crit ? ' — critical!' : '.'), crit ? 'crit' : 'info');
     G.emit('fx', { t: 'hit', side: 'enemy', uid: e.uid, amt: dmg, crit: crit });
@@ -413,7 +535,8 @@
           uid: 'e' + c.enemies.length + '_' + sid + '_' + c.round, id: sid, name: sdef.name,
           hp: hp, maxHp: hp, dmg: [Math.round(sdef.dmg[0] * s), Math.round(sdef.dmg[1] * s)],
           spd: sdef.spd, crit: sdef.crit || 0.05, special: sdef.special || null,
-          boss: false, rotIdx: 0, look: sdef.look, tags: sdef.tags || []
+          boss: false, rotIdx: 0, look: sdef.look, tags: sdef.tags || [],
+          status: { burn: 0, chill: 0, bleed: 0, ward: false }, intent: null, nonlethal: false
         });
         G.Exp.elog(e.name + ' tolls its bell — a ' + sdef.name + ' answers!', 'bad');
         G.emit('fx', { t: 'summon', uid: e.uid });
@@ -442,6 +565,29 @@
       return;
     }
 
+    // The Auricle's echo: it plays the party's own favourite move back, amplified
+    if (action === 'echo') {
+      var fav = 'strike', mx = -1;
+      ['strike', 'skill', 'guard', 'item'].forEach(function (k) { if ((c.actionCounts[k] || 0) > mx) { mx = c.actionCounts[k] || 0; fav = k; } });
+      G.Exp.elog(e.name + ' echoes your own delving back at you…', 'bad');
+      if (fav === 'skill') { action = 'aoe'; } // they lean on skills → it sweeps
+      else if (fav === 'guard' || fav === 'item') { // they play safe → it heals & wards itself
+        estatus(e).ward = true; e.hp = Math.min(e.maxHp, e.hp + Math.round(e.maxHp * 0.08));
+        G.Exp.elog(e.name + ' mirrors your caution — it guards and mends.', 'bad');
+        return;
+      } else { // strike-heavy → a single crushing blow
+        var tgt = G.rpick(team);
+        C.damageDelver(tgt, Math.round(G.rint(e.dmg[0], e.dmg[1]) * 1.8 * chorus), e, true);
+        return;
+      }
+    }
+    // The Auricle's systole: the tunnel clenches — heavy hit on all
+    if (action === 'systole') {
+      G.Exp.elog(e.name + ' clenches the whole gallery shut!', 'bad');
+      team.slice().forEach(function (d) { C.damageDelver(d, Math.round(G.rint(e.dmg[0], e.dmg[1]) * 0.85 * chorus), e); });
+      return;
+    }
+
     if (action === 'aoe') {
       G.Exp.elog(e.name + ' sweeps the whole line!', 'bad');
       team.slice().forEach(function (d) {
@@ -463,12 +609,19 @@
 
       var dmg = G.rint(e.dmg[0], e.dmg[1]);
       if (e.special === 'slow') dmg = Math.round(dmg * 1.5);
+      if (chilled(estatus(e))) dmg = Math.round(dmg * 0.7); // a chilled enemy hits softer
       dmg = Math.round(dmg * chorus);
       var crit = G.rchance(e.crit);
       if (crit) dmg = Math.round(dmg * 1.5);
       // indexed citation: double the marked delver's next hit taken
       if (c.indexedDelver === target.id) { dmg = Math.round(dmg * 2); c.indexedDelver = null; G.Exp.elog(e.name + ' corrects the citation — the blow lands double!', 'bad'); }
-      C.damageDelver(target, dmg, e, crit);
+      var dealt = C.damageDelver(target, dmg, e, crit);
+
+      // Veins specials ride the strike
+      if (e.special === 'drain' && dealt > 0) { e.hp = Math.min(e.maxHp, e.hp + Math.round(dealt * 0.6)); G.Exp.elog(e.name + ' drinks the wound and warms (+' + Math.round(dealt * 0.6) + ').', 'bad'); }
+      if (e.special === 'bleed' && target.alive) { C.applyStatus(target.id, 'bleed', 3); G.Exp.elog(target.name + ' is bleeding.', 'bad'); }
+      if (e.special === 'chill' && target.alive) { C.applyStatus(target.id, 'chill', 2); G.Exp.elog(target.name + ' is chilled to the bone.', 'bad'); }
+      if (e.special === 'want' && target.alive && !c.skipNext[target.id]) { c.skipNext[target.id] = true; G.Exp.elog(target.name + ' falters, listening to the Chorus.', 'bad'); }
 
       if (e.special === 'tithe' && ex.marksFound > 0) {
         var steal = Math.min(ex.marksFound, G.rint(1, 3));
@@ -489,6 +642,9 @@
   C.damageDelver = function (d, dmg, e, crit) {
     var c = C.cur();
     var ex = G.state.expedition;
+    // status ward eats the blow entirely
+    var ds = C.dstatus(d.id);
+    if (ds.ward) { ds.ward = false; G.Exp.elog(d.name + '’s ward flares and eats the blow.', 'good'); G.emit('fx', { t: 'status', side: 'delver', who: d.id, kind: 'ward' }); return 0; }
     if (c.guarding[d.id]) {
       dmg = Math.max(1, Math.round(dmg * G.BAL.guardReduce));
       // Counterweight: guarding reflects a little damage back
@@ -505,14 +661,14 @@
         d.hp = 1; c.downed[d.id] = true;
         G.Exp.elog(d.name + ' is knocked down and yields.', 'bad');
         G.emit('fx', { t: 'brink', who: d.id });
-        return;
+        return dmg;
       }
       // Vanguard 'unbroken': personal brink, once per fight
       if (talent(d, 'unbroken') && !c.unbroken[d.id]) {
         c.unbroken[d.id] = true; d.hp = 1;
         G.Exp.elog(d.name + ' will not go down — not yet.', 'good');
         G.emit('fx', { t: 'brink', who: d.id });
-        return;
+        return dmg;
       }
       // infirmary L3 brink ward
       if (G.bldFx('infirmary', 'brinkWard', false) && !ex.brinkUsed) {
@@ -520,13 +676,14 @@
         d.hp = 1;
         G.Exp.elog('The infirmary’s brink-charm flares — ' + d.name + ' refuses to fall!', 'good');
         G.emit('fx', { t: 'brink', who: d.id });
-        return;
+        return dmg;
       }
       c.diedThisFight = c.diedThisFight || {};
       c.diedThisFight[d.id] = true;
       G.Delvers.kill(d, 'slain by ' + e.name + ' at depth ' + ex.depth);
       G.emit('fx', { t: 'delverDeath', who: d.id });
     }
+    return dmg;
   };
 
   /* ---------- resolution ---------- */

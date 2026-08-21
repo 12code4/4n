@@ -148,6 +148,8 @@ table.mkt td.r, table.mkt th.r { text-align: right; }
 .choice .sub { display: block; margin-top: 2px; }
 
 .pill { display: inline-block; border: 1px solid rgba(201,164,104,0.4); border-radius: 10px; padding: 0 8px; font-size: 11px; color: var(--ink-dim); margin-right: 4px; }
+.pip { display: inline-block; font-size: 11px; padding: 0 3px; border-radius: 6px; margin-left: 2px; }
+.pip.burn { color: #ff9a3d; } .pip.chill { color: #7fd0ff; } .pip.bleed { color: #ff6a7a; } .pip.ward { color: #9db4d6; }
 
 .enemyrow { cursor: pointer; }
 .enemyrow:hover { border-color: var(--brass-hi); }

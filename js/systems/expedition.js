@@ -17,14 +17,24 @@
       var row = [];
       for (var c = 0; c < count; c++) {
         var wl = [];
-        for (var t in biome.nodeW) wl.push({ t: t, w: biome.nodeW[t] });
+        for (var t in biome.nodeW) {
+          var w = biome.nodeW[t];
+          // the Maw's mood tilts a floor toward trouble or toward wonders
+          if (G.Moods) {
+            if (t === 'fight') w += G.Moods.fx('fightW', 0);
+            if (t === 'event') w += G.Moods.fx('eventW', 0);
+          }
+          if (w > 0) wl.push({ t: t, w: w });
+        }
         var type = G.rweighted(wl, function (x) { return x.w; }).t;
+        // omen of salt: no resting hollows
+        if (type === 'rest' && G.Omens && G.Omens.flag('noRest')) type = 'fight';
         row.push(node(type, r, c));
       }
-      // guarantee at most one rest/peddler per rank (dedupe into fights)
+      // guarantee at most one rest/peddler/pulse per rank (dedupe into fights)
       var seen = {};
       for (var i = 0; i < row.length; i++) {
-        if ((row[i].type === 'rest' || row[i].type === 'peddler') && seen[row[i].type]) row[i].type = 'fight';
+        if ((row[i].type === 'rest' || row[i].type === 'peddler' || row[i].type === 'pulse') && seen[row[i].type]) row[i].type = 'fight';
         seen[row[i].type] = true;
       }
       rows.push(row);
@@ -45,9 +55,11 @@
       var cand = rrow[Math.floor(G.rng() * rrow.length)];
       cand.type = 'cache';
     }
-    // final rank: guardian if biome's last depth & not slain, else shaft
+    // final rank: guardian if biome's last depth & not slain, else shaft.
+    // The Omen of the Quiet Stair removes the guardian (and its rewards).
     var lastType = 'shaft';
-    if (depth === biome.depths[1] && !G.state.guardiansSlain[biome.id]) lastType = 'guardian';
+    var quiet = G.Omens && G.Omens.flag('noGuardian');
+    if (depth === biome.depths[1] && !G.state.guardiansSlain[biome.id] && !quiet) lastType = 'guardian';
     rows.push([node(lastType, nRanks + 1, 0)]);
 
     // edges: each node -> 1-2 nodes in next rank; every next-rank node gets an inbound
@@ -109,8 +121,11 @@
       loot: {}, marksFound: 0,
       mode: 'map', combat: null, event: null, peddler: null,
       daysOut: 0, bypass: false, brinkUsed: false,
-      xpEarned: {}, killCount: 0, log: []
+      xpEarned: {}, killCount: 0, log: [],
+      omens: (st.omenChosen || []).slice(),                       // v4 locked omens
+      beast: (st.beasts && st.beasts.active) || null              // v4 companion for the run
     };
+    if (G.Omens) G.Omens.reset(); // clear the offer once committed
     st.supplies.torches = 0; st.supplies.rations = 0; st.supplies.bandages = 0;
     st.stats.delves++;
     teamIds.forEach(function (id) { G.Delvers.get(id).delves++; });
@@ -194,8 +209,8 @@
     var node = X.findNode(ex.map, nodeId);
     ex.at = nodeId;
 
-    // torchlight — a relic (the Blank Card) can make the dark hungrier for torches
-    var torchCost = 1 + (G.Relics ? G.Relics.add('torchDrain') : 0);
+    // torchlight — a relic (the Blank Card) or a held-breath mood makes the dark hungrier
+    var torchCost = 1 + (G.Relics ? G.Relics.add('torchDrain') : 0) + (G.Moods ? G.Moods.fx('torch', 0) : 0);
     if (ex.torches >= torchCost) {
       ex.torches -= torchCost;
     } else {
@@ -274,6 +289,16 @@
         node.done = true;
         ex.mode = 'peddler';
         X.elog('A deep peddler’s lantern glows in an alcove. “Fair rates for the depth,” it says.', 'info');
+        break;
+      }
+      case 'pulse': {
+        // a heartbeat chamber in the Veins: rest to the Maw's pulse, and it gives a little
+        node.done = true;
+        var team = X.team();
+        team.forEach(function (d) { d.hp = Math.min(G.Delvers.maxHp(d), d.hp + Math.round(G.Delvers.maxHp(d) * 0.25)); });
+        if (G.rchance(0.5)) X.grantMat('pulse_gem', 1);
+        else X.grantLootValue(6 + depth);
+        X.elog('A chamber that beats slow and warm. The team breathes with the Maw and mends.', 'good');
         break;
       }
       case 'shaft': {
@@ -376,7 +401,8 @@
       team.forEach(function (d) { if (d.stats[choice.check.stat] > actor.stats[choice.check.stat]) actor = d; });
       var bonus = 0;
       team.forEach(function (d) { bonus += (G.Delvers.trait(d).eventLuck || 0); });
-      var stat = actor.stats[choice.check.stat] + (choice.check.stat === 'luck' ? bonus : 0);
+      var chalk = (G.Prestige && G.Prestige.fx('eventLuck')) || 0; // Maren's Chalk legacy perk
+      var stat = actor.stats[choice.check.stat] + (choice.check.stat === 'luck' ? bonus : 0) + chalk;
       var p = G.U.clamp(0.5 + (stat - choice.check.dc) * 0.07, 0.15, 0.92);
       outs = G.rchance(p) ? choice.outcomes.success : choice.outcomes.fail;
     } else {
@@ -419,6 +445,11 @@
       G.Delvers.addToRoster(nd);
       X.elog(nd.name + ' (' + G.DATA.classes[nd.cls].name + ') will be waiting at the tavern — first month free.', 'good');
     }
+    if (fx.rescueBeast && G.Beasts) {
+      // the beast comes home if there's a Menagerie with room; the event flavor
+      // already covers the "no menagerie" case in the log
+      G.Beasts.rescue(fx.rescueBeast);
+    }
     if (fx.fight) {
       ex.event.pendingFight = fx.fight === 'encounter' ? X.buildEncounter(ex.depth) : fx.fight.slice();
       ex.event.firstStrike = !!fx.firstStrike;
@@ -453,6 +484,9 @@
       if (G.Forge) mult += G.Forge.fx(d, 'loot');
     });
     if (G.Relics) mult *= G.Relics.mult('lootMult');
+    if (G.Moods) mult *= G.Moods.fx('loot', 1);        // the Maw's generosity
+    if (G.Omens) mult *= G.Omens.mult('loot');          // chosen omens
+    if (G.Beasts) mult *= G.Beasts.passive('loot', 1);  // a fetching beast
     value = Math.round(value * mult);
     var tries = 0;
     while (value > 0 && tries++ < 30) {

@@ -10,6 +10,7 @@
     var bonus = G.bldFx('assay', 'sellBonus', 0) + G.bldFx('storehouse', 'priceBonus', 0);
     if (G.Renown && G.Renown.hasPerk('sell5')) bonus += 0.05;      // renown tier perk
     if (G.Rivals) bonus += G.Rivals.claimSellBonus(matId);          // player-owned biome claim
+    if (G.Prestige && G.Prestige.fx('legacySell')) bonus += G.Prestige.fx('legacySell'); // Old Colours
     var mult = (1 + bonus) * (G.Relics ? G.Relics.mult('sellMult') : 1); // relic
     return Math.max(1, Math.round(p * mult));
   };
@@ -44,12 +45,18 @@
     return { ok: true };
   };
 
+  E.buildCost = function (id, lvl) {
+    var def = G.DATA.buildings[id];
+    var raw = def.costs[lvl];
+    var disc = (G.Prestige && G.Prestige.fx('buildDiscount')) || 0; // Thrift legacy perk
+    return Math.max(1, Math.round(raw * (1 - disc)));
+  };
   E.build = function (id) {
     var st = G.state;
     var def = G.DATA.buildings[id];
     var lvl = st.buildings[id] || 0;
     if (lvl >= def.costs.length) return { ok: false, msg: 'Fully built.' };
-    var cost = def.costs[lvl];
+    var cost = E.buildCost(id, lvl);
     if (st.marks < cost) return { ok: false, msg: 'Not enough marks.' };
     st.marks -= cost; st.stats.spent += cost;
     st.buildings[id] = lvl + 1;
@@ -66,7 +73,8 @@
       var m = mats[i];
       st.marketPrev[m.id] = E.price(m.id); // remember effective price for ▲▼ arrows
       var p = st.market[m.id];
-      var drift = 1 + (G.rng() * 2 - 1) * G.BAL.marketDrift;
+      var driftAmp = G.BAL.marketDrift * (G.Moods ? G.Moods.fx('drift', 1) : 1);
+      var drift = 1 + (G.rng() * 2 - 1) * driftAmp;
       // gentle pull back toward base so prices don't wander off forever
       var pull = 1 + (m.base - p) / m.base * 0.03;
       p = p * drift * pull;
@@ -89,7 +97,8 @@
   };
   E.price = function (id) {
     var st = G.state;
-    return Math.max(1, Math.round((st.market[id] || 1) * E.shockMult(id)));
+    var mood = G.Moods ? G.Moods.fx('marketMult', 1) : 1; // the Maw floods or starves the market
+    return Math.max(1, Math.round((st.market[id] || 1) * E.shockMult(id) * mood));
   };
   E.marketEventsTick = function () {
     var st = G.state;
@@ -175,12 +184,14 @@
     var st = G.state;
     st.day++;
     st.stats.daysRun++;
+    if (G.Moods) G.Moods.tick();
     E.shopSales();
     E.payWages();
     E.marketDrift();
     E.marketEventsTick();
     if (G.Contracts) G.Contracts.dailyTick();
     if (G.Rivals) G.Rivals.dailyTick();
+    if (G.Beasts) G.Beasts.betweenRuns();
     E.healInjuries();
     G.Delvers.dailyHeal();
     G.Delvers.refreshPool();

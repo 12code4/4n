@@ -45,4 +45,23 @@
     });
     return st;
   };
+
+  // v3 (3.0 "Rivals & Renown") → v4 (4.0 "The Living Maw")
+  G.migrations[3] = function (st) {
+    st.buildings.menagerie = st.buildings.menagerie || 0;
+    if (st.mood === undefined) st.mood = null;
+    if (st.omenOffer === undefined) st.omenOffer = null;
+    if (!st.omenChosen) st.omenChosen = [];
+    if (!st.beasts) st.beasts = { owned: [], active: null };
+    if (!st.legacy) st.legacy = { marks: 0, perks: [] };
+    // a live expedition from v3 gains the new per-run fields
+    if (st.expedition) {
+      if (!st.expedition.omens) st.expedition.omens = [];
+      if (st.expedition.beast === undefined) st.expedition.beast = null;
+    }
+    G.DATA.materialList().forEach(function (m) {
+      if (st.market[m.id] === undefined) st.market[m.id] = m.base;
+    });
+    return st;
+  };
 })();
