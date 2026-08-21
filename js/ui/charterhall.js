@@ -198,8 +198,31 @@
           UI.refresh();
         }
       }));
+      // note set membership on the card
+      if (r.set && G.DATA.relicSets && G.DATA.relicSets[r.set]) {
+        card.appendChild(h('span.sub', { text: '  · ' + G.DATA.relicSets[r.set].name, style: 'color:hsl(280,55%,72%)' }));
+      }
       panel.appendChild(card);
     });
+
+    // v7: relic-set bonuses — show which set tiers are live
+    if (G.DATA.relicSets) {
+      var anyPiece = G.Relics.owned().some(function (id) { return G.DATA.relics[id] && G.DATA.relics[id].set; });
+      if (anyPiece) {
+        panel.appendChild(h('h3', { text: 'Set Bonuses' }));
+        for (var sid in G.DATA.relicSets) {
+          (function (sdef) {
+            var slotted = G.Relics.slotted();
+            var n = sdef.pieces.filter(function (p) { return slotted.indexOf(p) >= 0; }).length;
+            var card = h('div.card' + (n >= 2 ? '.selected' : ''), { style: n >= 2 ? '' : 'opacity:0.7' });
+            card.appendChild(h('div.row', {}, [h('span.name', { text: sdef.name }), h('span.sub', { text: n + '/' + sdef.pieces.length + ' slotted' })]));
+            if (sdef.bonus2) card.appendChild(h('p.sub', { html: (n >= 2 ? '◈ ' : '○ ') + UI.esc(sdef.bonus2.desc), style: 'margin:2px 0;color:' + (n >= 2 ? 'var(--good)' : 'var(--ink-dim)') }));
+            if (sdef.bonus4) card.appendChild(h('p.sub', { html: (n >= 4 ? '◈ ' : '○ ') + UI.esc(sdef.bonus4.desc), style: 'margin:2px 0;color:' + (n >= 4 ? 'var(--good)' : 'var(--ink-dim)') }));
+            panel.appendChild(card);
+          })(G.DATA.relicSets[sid]);
+        }
+      }
+    }
   }
 
   function renderQuests(panel) {

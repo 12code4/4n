@@ -42,6 +42,7 @@
       festival: null, _lastSeason: 0,      // v6 seasons/festivals
       loan: null,                          // v6 countinghouse loan
       hints: {},                           // v6 onboarding
+      deepRecord: 0,                       // v7 deepest Undervault stratum this charter
       unlockedStart: 1,                    // deepest depth an expedition may START at
       guardiansSlain: {},                  // biomeId -> true
       expedition: null,
@@ -50,7 +51,7 @@
       journalRead: [],
       flags: {},
       stats: { delves: 0, deaths: 0, kills: 0, earned: 0, spent: 0, deepest: 0, daysRun: 1, sold: 0,
-        crafted: 0, contractsDone: 0, rivalWins: 0, honored: 0 },
+        crafted: 0, contractsDone: 0, rivalWins: 0, honored: 0, deepestStratum: 0 },
       unpaid: {},                          // delverId -> consecutive unpaid days
       log: [],
       ui: { bark: 0 }

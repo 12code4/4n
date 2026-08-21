@@ -14,7 +14,23 @@
       return;
     }
     var tier = G.Forge.tier();
-    panel.appendChild(h('p.sub', { text: 'Forge level ' + G.bld('forge') + ' — tier ' + tier + ' patterns available. Gear goes to the armory; equip it below.' }));
+    var ctier = G.Forge.craftTier();
+    panel.appendChild(h('p.sub', { text: 'Forge level ' + G.bld('forge') + ' — tier ' + ctier + ' patterns available. Gear goes to the armory; equip it below.' }));
+
+    // v7: the Deep Forge — an Undervault upgrade that unlocks tier IV
+    if (G.Forge.hasDeepForge()) {
+      panel.appendChild(h('div.card', { style: 'border-color:#6a4a8a' }, [h('div.row', {}, [h('span.name', { text: '▽ The Deep Forge burns' }), h('span.sub', { text: 'tier IV unlocked' })])]));
+    } else if (tier >= 3) {
+      var dfErr = G.Forge.canDeepForge();
+      var dc = G.Forge.DEEP_COST;
+      var card = h('div.card', { style: 'border-color:#5a3a7a' });
+      card.appendChild(h('div.row', {}, [h('span.name', { text: '▽ Light the Deep Forge' }), h('span.sub', { text: 'unlocks tier IV' })]));
+      card.appendChild(h('p.sub', { text: 'Stoke the furnace on gilt-marrow drawn from the Undervault, and the anvil learns the Court’s patterns.', style: 'margin:3px 0' }));
+      card.appendChild(h('p.sub', { text: dc.marks + 'ᵯ · ' + dc.qty + '× ' + G.DATA.materials[dc.mat].name, style: 'margin:2px 0' }));
+      card.appendChild(h('button.small.primary', { text: 'Light it', disabled: !!dfErr, title: dfErr || '', onclick: function () { var r = G.Forge.upgradeDeepForge(); if (!r.ok) UI.toast(r.msg, 'bad'); UI.refresh(); } }));
+      if (dfErr) card.appendChild(h('span.sub', { text: '  ' + dfErr, style: 'margin-left:6px' }));
+      panel.appendChild(card);
+    }
 
     /* armory */
     panel.appendChild(h('h3', { text: 'Armory (' + st.armory.length + ')' }));
@@ -48,8 +64,8 @@
     /* patterns */
     panel.appendChild(h('h3', { text: 'Patterns' }));
     G.DATA.gearList().forEach(function (def) {
-      if (def.tier > tier + 1) return; // show current + next tier as teaser
-      var locked = def.tier > tier;
+      if (def.tier > Math.max(tier, ctier) + 1) return; // show current + next tier as teaser
+      var locked = def.tier > ctier;
       var err = locked ? null : G.Forge.canCraft(def.id);
       var card = h('div.card', locked ? { style: 'opacity:0.55' } : {});
       card.appendChild(h('div.row', {}, [
@@ -59,7 +75,7 @@
       var costBits = [def.cost.marks + 'ᵯ'];
       for (var id in (def.cost.mats || {})) costBits.push(def.cost.mats[id] + '× ' + G.DATA.materials[id].name);
       card.appendChild(h('p.sub', { text: costBits.join(' · '), style: 'margin:3px 0' }));
-      if (locked) card.appendChild(h('span.pill', { text: 'needs Forge L' + def.tier }));
+      if (locked) card.appendChild(h('span.pill', { text: def.tier >= 4 ? 'needs the Deep Forge' : 'needs Forge L' + def.tier }));
       else card.appendChild(h('button.small.primary', {
         text: 'Craft',
         disabled: !!err,

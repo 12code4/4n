@@ -21,6 +21,19 @@
     rival: 'Another charter holds the way.'
   };
 
+  // v7: the Undervault stratum's affix terms
+  function vaultBanner(panel, ex) {
+    var affs = G.Vault.affixes();
+    var wrap = h('div.row', { style: 'gap:4px;flex-wrap:wrap;margin:2px 0 6px' });
+    if (G.Vault.isGuardianStratum(ex.stratum)) wrap.appendChild(h('span', { text: '⚖ the Court holds this stratum', style: 'font-size:11px;padding:2px 7px;border-radius:9px;background:hsla(285,50%,40%,0.25);border:1px solid hsla(285,60%,55%,0.6);color:hsl(285,60%,80%)' }));
+    if (!affs.length) wrap.appendChild(h('span.sub', { text: 'no terms this stratum' }));
+    affs.forEach(function (id) {
+      var a = G.DATA.affixDef(id); if (!a) return;
+      wrap.appendChild(h('span', { title: a.blurb, text: a.name, style: 'font-size:11px;padding:2px 7px;border-radius:9px;background:hsla(' + a.hue + ',60%,40%,0.25);border:1px solid hsla(' + a.hue + ',70%,55%,0.6);color:hsl(' + a.hue + ',70%,78%)' }));
+    });
+    panel.appendChild(wrap);
+  }
+
   function teamStrip(panel) {
     var ex = G.state.expedition;
     G.Exp.team().forEach(function (d) {
@@ -53,8 +66,9 @@
     if (ex.mode === 'guardian') return renderGuardianApproach(panel);
     if (ex.mode === 'guardian_won') return renderGuardianWon(panel);
 
-    panel.appendChild(h('h2', { text: 'Depth ' + ex.depth + ' — ' + biome.name }));
+    panel.appendChild(h('h2', { text: ex.vault ? 'The Undervault — Stratum ' + ex.stratum : 'Depth ' + ex.depth + ' — ' + biome.name }));
     panel.appendChild(h('p.sub', { text: biome.tagline }));
+    if (ex.vault && G.Vault) vaultBanner(panel, ex);
     teamStrip(panel);
 
     var lootVal = 0;
@@ -144,10 +158,16 @@
     var st = G.state;
     var ex = st.expedition;
     var biome = G.DATA.biomeForDepth(ex.depth);
-    panel.appendChild(h('h2', { text: 'The Shaft' }));
-    panel.appendChild(h('p', { text: 'A winch-shaft sunk by the first charter. Rope up to the evening sky — or down, into the next breath of the Maw.' }));
+    panel.appendChild(h('h2', { text: ex.vault ? 'The Vault Stair' : 'The Shaft' }));
+    panel.appendChild(h('p', { text: ex.vault ? 'No winch reaches this deep. A stair worn by ledgers goes down into the next stratum — or you climb, hand over hand, back toward the light with what you have taken.' : 'A winch-shaft sunk by the first charter. Rope up to the evening sky — or down, into the next breath of the Maw.' }));
     teamStrip(panel);
-    if (G.Exp.canDescend()) {
+    if (ex.vault) {
+      panel.appendChild(h('button.primary', {
+        text: '▽ Descend to Stratum ' + (ex.stratum + 1) + (G.Vault.isGuardianStratum(ex.stratum + 1) ? ' — a Court guardian waits' : ''),
+        style: 'width:100%;margin-top:6px;background:#3a2450;border-color:#6a4a8a',
+        onclick: function () { G.Exp.descend(); UI.refresh(); }
+      }));
+    } else if (G.Exp.canDescend()) {
       var nd = ex.depth + 1;
       panel.appendChild(h('button.primary', {
         text: '▼ Descend to depth ' + nd + ' — ' + G.DATA.biomeForDepth(nd).name,
@@ -169,10 +189,11 @@
   function renderGuardianApproach(panel) {
     var ex = G.state.expedition;
     var biome = G.DATA.biomeForDepth(ex.depth);
-    var gdef = G.DATA.enemies[biome.guardian];
+    var gid = (ex.vault && G.Vault) ? G.Vault.guardianFor(ex.stratum) : biome.guardian;
+    var gdef = G.DATA.enemies[gid];
     panel.appendChild(h('h2', { text: gdef.name }));
     panel.appendChild(h('p', { text: gdef.desc }));
-    panel.appendChild(h('p.sub', { text: 'Beyond it: the stair down, and everything Maren meant to find. Guardians do not forgive half-measures — fleeing this fight is nearly impossible.' }));
+    panel.appendChild(h('p.sub', { text: ex.vault ? 'A Court office bars the stratum. Break it and the stair below stands open — but the Court does not forgive half-measures.' : 'Beyond it: the stair down, and everything Maren meant to find. Guardians do not forgive half-measures — fleeing this fight is nearly impossible.' }));
     teamStrip(panel);
     panel.appendChild(h('button.danger', {
       text: '⚔ Face ' + gdef.name,
@@ -191,9 +212,15 @@
     var ex = st.expedition;
     var biome = G.DATA.biomeForDepth(ex.depth);
     panel.appendChild(h('h2', { text: 'The Stair Stands Open' }));
-    panel.appendChild(h('p', { text: 'The keeper of the ' + biome.name + ' is down. Its post is vacant; its toll uncollected. The winch crews will talk about this for years.' }));
+    panel.appendChild(h('p', { text: ex.vault ? 'The Court office is broken and its seal is yours. The stratum below stands open — the accounts run deeper still.' : 'The keeper of the ' + biome.name + ' is down. Its post is vacant; its toll uncollected. The winch crews will talk about this for years.' }));
     teamStrip(panel);
-    if (G.Exp.canDescend()) {
+    if (ex.vault) {
+      panel.appendChild(h('button.primary', {
+        text: '▽ Press on to Stratum ' + (ex.stratum + 1),
+        style: 'width:100%;margin-top:6px;background:#3a2450;border-color:#6a4a8a',
+        onclick: function () { G.Exp.descend(); UI.refresh(); }
+      }));
+    } else if (G.Exp.canDescend()) {
       var nd = ex.depth + 1;
       panel.appendChild(h('button.primary', {
         text: '▼ Press on to depth ' + nd + ' — ' + G.DATA.biomeForDepth(nd).name,

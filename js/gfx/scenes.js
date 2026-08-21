@@ -561,7 +561,17 @@
   /* =================== COMBAT =================== */
   F.combatPos = function (kind, i) {
     var U = F.uW(), H = F.H;
-    if (kind === 'delver') return { x: U * 0.30 - i * 96, y: H * 0.58 + i * 52 };
+    if (kind === 'delver') {
+      // v7: front line sits forward toward the enemies; the back line stands a step behind and higher
+      var team = (G.Exp && G.state && G.state.expedition) ? G.Exp.team() : [];
+      var d = team[i];
+      var row = (G.Combat && d) ? G.Combat.rowOf(d) : 'front';
+      // index among same-row delvers, for staggering
+      var k = 0; if (d && G.Combat) { for (var j = 0; j < i; j++) if (team[j] && G.Combat.rowOf(team[j]) === row) k++; }
+      var baseX = row === 'back' ? U * 0.16 : U * 0.33;
+      var baseY = row === 'back' ? H * 0.46 : H * 0.60;
+      return { x: baseX - k * 74, y: baseY + k * 54 };
+    }
     return { x: U * 0.72 + i * 100, y: H * 0.58 + i * 50 };
   };
   F.FIG_SCALE = 1.5;
@@ -635,6 +645,8 @@
       case 'hound': return 14 + 12 * s;
       case 'auricle': return 52 * s + 12;
       case 'heart': return 46 * s + 14;
+      case 'noble': return 52 * s + 8;
+      case 'exchequer': return 60 * s + 10;
       default: return 40;
     }
   }
@@ -930,6 +942,59 @@
         // inner light
         cx.fillStyle = flash ? '#fff' : hsl(hue + 10, 90, 82);
         cx.beginPath(); cx.arc(x, y - 6 * S, 8 * S * beat, 0, Math.PI * 2); cx.fill();
+        break;
+      }
+      case 'noble': {
+        // a Deep Court functionary: high-collared robe, a blank ledger-mask, tally motes
+        cx.fillStyle = flash ? '#fff' : hsl(hue, 30, 24);
+        F.poly(cx, [[x - 18 * S, y + 24], [x - 12 * S, y - 40 * S], [x + 12 * S, y - 40 * S], [x + 18 * S, y + 24]]); cx.fill(); // robe
+        // high stiff collar
+        cx.fillStyle = flash ? '#fff' : hsl(hue, 35, 40);
+        F.poly(cx, [[x - 12 * S, y - 40 * S], [x, y - 30 * S], [x + 12 * S, y - 40 * S], [x + 8 * S, y - 46 * S], [x - 8 * S, y - 46 * S]]); cx.fill();
+        // blank mask-face
+        cx.fillStyle = flash ? '#fff' : hsl(hue, 18, 74);
+        cx.beginPath(); cx.ellipse(x, y - 46 * S, 8 * S, 10 * S, 0, 0, Math.PI * 2); cx.fill();
+        cx.strokeStyle = hsl(hue, 40, 30); cx.lineWidth = 1.4;
+        cx.beginPath(); cx.moveTo(x, y - 52 * S); cx.lineTo(x, y - 40 * S); cx.stroke(); // seam
+        cx.fillStyle = flash ? '#fff' : hsl(hue, 60, 30);
+        cx.beginPath(); cx.arc(x - 3 * S, y - 47 * S, 1.3, 0, Math.PI * 2); cx.arc(x + 3 * S, y - 47 * S, 1.3, 0, Math.PI * 2); cx.fill(); // eye-slits
+        // a ledger clasped at the chest, faintly aglow
+        cx.fillStyle = flash ? '#fff' : hsl(hue, 45, 46);
+        F.rr(cx, x - 7 * S, y - 20 * S, 14 * S, 12 * S, 2); cx.fill();
+        F.glow(cx, x, y - 14 * S, 10 * S, hsl(hue, 80, 60), 0.35 + 0.15 * Math.sin(t * 2 + hue));
+        // tally motes orbiting the head
+        cx.fillStyle = hsl(hue, 70, 62);
+        for (var nm = 0; nm < 3; nm++) {
+          var na = t * 1.1 + nm * 2.09;
+          cx.fillRect(x + Math.cos(na) * 14 * S - 1, y - 46 * S + Math.sin(na) * 8 * S - 1, 2.4, 2.4);
+        }
+        break;
+      }
+      case 'exchequer': {
+        // a Court guardian: a great seated office of gilt and law, a scale for a head
+        var eb = 0.6 + 0.3 * Math.sin(t * 1.8);
+        F.glow(cx, x, y - 20 * S, 46 * S, hsl(hue, 80, 50), 0.28 + 0.12 * eb);
+        // throne-fused body
+        cx.fillStyle = flash ? '#fff' : hsl(hue, 28, 20);
+        F.rr(cx, x - 24 * S, y - 30 * S, 48 * S, 54 * S, 8); cx.fill();
+        // robed torso
+        cx.fillStyle = flash ? '#fff' : hsl(hue, 34, 30);
+        F.poly(cx, [[x - 16 * S, y - 6], [x - 12 * S, y - 46 * S], [x + 12 * S, y - 46 * S], [x + 16 * S, y - 6]]); cx.fill();
+        // the seal on the chest
+        cx.fillStyle = flash ? '#fff' : hsl(hue, 70, 55);
+        cx.beginPath(); cx.arc(x, y - 22 * S, 7 * S, 0, Math.PI * 2); cx.fill();
+        cx.fillStyle = hsl(hue, 30, 18);
+        cx.font = (9 * S) + 'px Georgia, serif'; cx.textAlign = 'center';
+        cx.fillText('ᵯ', x, y - 19 * S);
+        // a balance-scale crowning the shoulders (the head)
+        cx.strokeStyle = flash ? '#fff' : hsl(hue, 60, 62); cx.lineWidth = 2.5;
+        var bx = x, by = y - 52 * S, tilt = Math.sin(t * 1.5) * 3 * S;
+        cx.beginPath(); cx.moveTo(bx, by + 8 * S); cx.lineTo(bx, by); cx.stroke(); // post
+        cx.beginPath(); cx.moveTo(bx - 14 * S, by - tilt); cx.lineTo(bx + 14 * S, by + tilt); cx.stroke(); // beam
+        cx.fillStyle = flash ? '#fff' : hsl(hue, 55, 52);
+        cx.beginPath(); cx.arc(bx - 14 * S, by - tilt + 3, 3.4 * S, 0, Math.PI); cx.fill();
+        cx.beginPath(); cx.arc(bx + 14 * S, by + tilt + 3, 3.4 * S, 0, Math.PI); cx.fill();
+        F.glow(cx, bx, by, 9 * S, hsl(hue, 85, 62), 0.4 + 0.2 * eb); // the office's judging light
         break;
       }
     }

@@ -30,6 +30,8 @@
         var type = G.rweighted(wl, function (x) { return x.w; }).t;
         // omen of salt: no resting hollows
         if (type === 'rest' && G.Omens && G.Omens.flag('noRest')) type = 'fight';
+        // Undervault "Famine" affix: the stratum offers no rest or pulse
+        if ((type === 'rest' || type === 'pulse') && G.Vault && G.Vault.has('famine')) type = 'fight';
         row.push(node(type, r, c));
       }
       // guarantee at most one rest/peddler/pulse per rank (dedupe into fights)
@@ -61,6 +63,9 @@
     var lastType = 'shaft';
     var quiet = G.Omens && G.Omens.flag('noGuardian');
     if (depth === biome.depths[1] && !G.state.guardiansSlain[biome.id] && !quiet) lastType = 'guardian';
+    // Undervault: a Court guardian bars every few strata (the stratum's final rank)
+    var vex = G.state.expedition;
+    if (vex && vex.vault && G.Vault && G.Vault.isGuardianStratum(vex.stratum)) lastType = 'guardian';
     rows.push([node(lastType, nRanks + 1, 0)]);
 
     // edges: each node -> 1-2 nodes in next rank; every next-rank node gets an inbound
@@ -118,11 +123,14 @@
   };
 
   /* ---------- launch / floors ---------- */
-  X.canLaunch = function (teamIds, depth) {
+  X.canLaunch = function (teamIds, depth, opts) {
     var st = G.state;
+    opts = opts || {};
     if (st.expedition) return 'An expedition is already below.';
     if (!teamIds.length || teamIds.length > G.BAL.teamMax) return 'Take 1–' + G.BAL.teamMax + ' delvers.';
-    if (depth < 1 || depth > st.unlockedStart) return 'That depth is not yet opened.';
+    if (opts.vault) {
+      if (!G.Vault || !G.Vault.unlocked()) return 'The Vault stair is not open.';
+    } else if (depth < 1 || depth > st.unlockedStart) return 'That depth is not yet opened.';
     if (depth === 13 && st.heartSealed) return 'The stair to the Heart is collapsed. What is sealed stays sealed.';
     for (var i = 0; i < teamIds.length; i++) {
       var d = G.Delvers.get(teamIds[i]);
@@ -132,8 +140,9 @@
     return null;
   };
 
-  X.launch = function (teamIds, depth) {
-    var err = X.canLaunch(teamIds, depth);
+  X.launch = function (teamIds, depth, opts) {
+    opts = opts || {};
+    var err = X.canLaunch(teamIds, depth, opts);
     if (err) return { ok: false, msg: err };
     var st = G.state;
     st.expedition = {
@@ -146,14 +155,18 @@
       daysOut: 0, bypass: false, brinkUsed: false,
       xpEarned: {}, killCount: 0, log: [],
       omens: (st.omenChosen || []).slice(),                       // v4 locked omens
-      beasts: G.Beasts ? G.Beasts.lockRun(teamIds.map(G.Delvers.get)) : [] // v6 companion pack for the run
+      beasts: G.Beasts ? G.Beasts.lockRun(teamIds.map(G.Delvers.get)) : [], // v6 companion pack for the run
+      rows: opts.rows || {},                                       // v7 front/back placement (delverId -> row)
+      vault: !!opts.vault, stratum: opts.vault ? 1 : 0, affixes: [], ledgerStacks: 0, vaultFights: 0 // v7 Undervault
     };
     if (G.Omens) G.Omens.reset(); // clear the offer once committed
     st.supplies.torches = 0; st.supplies.rations = 0; st.supplies.bandages = 0;
     st.stats.delves++;
     teamIds.forEach(function (id) { G.Delvers.get(id).delves++; });
+    if (opts.vault && G.Vault) G.Vault.onLaunch();          // seed stratum 1 affixes before the floor is built
     X.enterFloor(depth);
-    G.log('Expedition departs for depth ' + depth + '. The winch pays out rope.', 'story');
+    G.log(opts.vault ? 'The company descends the Vault stair, below the Heart. The winch has no more rope — from here you climb.' :
+      'Expedition departs for depth ' + depth + '. The winch pays out rope.', 'story');
     if (G.Hints) G.Hints.fire('firstDescent');
     G.emit('expedition');
     return { ok: true };
@@ -353,7 +366,10 @@
     var biome = G.DATA.biomeForDepth(depth);
     var table = G.DATA.encounters[biome.id].filter(function (e) { return depth >= (e.minD || 1); });
     var pick = G.rweighted(table, function (e) { return e.w; });
-    return pick.group.slice();
+    var group = pick.group.slice();
+    // Undervault "Audit" affix: a Court noble joins every third fight
+    if (G.Vault && G.Vault.auditThisFight()) group.push(G.Vault.auditNoble());
+    return group;
   };
 
   X.runHazard = function (depth) {
@@ -511,6 +527,7 @@
   /* ---------- loot ---------- */
   X.grantMat = function (id, qty) {
     var ex = G.state.expedition;
+    if (G.Vault && G.Vault.giltActive()) qty *= 2; // the Gilt affix doubles what the dark sheds
     ex.loot[id] = (ex.loot[id] || 0) + qty;
     if (G.Codex) G.Codex.discover('material', id);
     X.elog('+' + qty + '× ' + G.DATA.materials[id].name, 'loot');
@@ -529,6 +546,7 @@
     if (G.Moods) mult *= G.Moods.fx('loot', 1);        // the Maw's generosity
     if (G.Omens) mult *= G.Omens.mult('loot');          // chosen omens
     if (G.Beasts) mult *= G.Beasts.passive('loot', 1);  // a fetching beast
+    if (G.Vault && G.Vault.giltActive()) mult *= 2;     // the Gilt affix doubles loot value
     value = Math.round(value * mult);
     var tries = 0;
     while (value > 0 && tries++ < 30) {
@@ -627,6 +645,7 @@
   X.canDescend = function () {
     var st = G.state, ex = st.expedition;
     if (!ex) return false;
+    if (ex.vault) return true; // the Undervault has no bottom
     var depth = ex.depth;
     if (depth >= G.DATA.maxDepth()) return false;
     var biome = G.DATA.biomeForDepth(depth);
@@ -638,6 +657,7 @@
     var ex = G.state.expedition;
     if (!ex || (ex.mode !== 'shaft' && ex.mode !== 'guardian_won')) return;
     if (!X.canDescend()) return;
+    if (ex.vault && G.Vault) G.Vault.onDescend(); // advance the stratum + reroll affixes before the floor builds
     ex.mode = 'map';
     X.enterFloor(ex.depth + 1);
     G.emit('expedition');
@@ -645,8 +665,12 @@
   X.fightGuardian = function () {
     var ex = G.state.expedition;
     if (!ex || ex.mode !== 'guardian') return;
-    var biome = G.DATA.biomeForDepth(ex.depth);
-    G.Combat.start([biome.guardian], { guardian: true });
+    if (ex.vault && G.Vault) {
+      G.Combat.start([G.Vault.guardianFor(ex.stratum)], { guardian: true, vaultGuardian: true });
+    } else {
+      var biome = G.DATA.biomeForDepth(ex.depth);
+      G.Combat.start([biome.guardian], { guardian: true });
+    }
     G.emit('expedition');
   };
 

@@ -82,7 +82,7 @@
     var dEl = document.getElementById('hud-depth');
     if (ex) {
       dEl.classList.remove('hidden');
-      dEl.innerHTML = '<b>' + ex.depth + '</b><span>depth</span>';
+      dEl.innerHTML = ex.vault ? '<b style="color:#b48bff">' + ex.stratum + '</b><span>stratum</span>' : '<b>' + ex.depth + '</b><span>depth</span>';
     } else dEl.classList.add('hidden');
     // Maw mood glyph
     var mEl = document.getElementById('hud-mood');

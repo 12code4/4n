@@ -101,4 +101,24 @@
     });
     return st;
   };
+
+  // v6 (6.0 "The Warden's Charter") → v7 (7.0 "The Undervault")
+  G.migrations[6] = function (st) {
+    if (st.deepRecord === undefined) st.deepRecord = 0;
+    if (st.stats.deepestStratum === undefined) st.stats.deepestStratum = 0;
+    if (!st.flags) st.flags = {};
+    // a live expedition gains the v7 per-run fields (front/back rows + vault state)
+    if (st.expedition) {
+      if (st.expedition.rows === undefined) st.expedition.rows = {};
+      if (st.expedition.vault === undefined) st.expedition.vault = false;
+      if (st.expedition.stratum === undefined) st.expedition.stratum = 0;
+      if (st.expedition.affixes === undefined) st.expedition.affixes = [];
+      if (st.expedition.ledgerStacks === undefined) st.expedition.ledgerStacks = 0;
+      if (st.expedition.vaultFights === undefined) st.expedition.vaultFights = 0;
+    }
+    G.DATA.materialList().forEach(function (m) {
+      if (st.market[m.id] === undefined) st.market[m.id] = m.base;
+    });
+    return st;
+  };
 })();

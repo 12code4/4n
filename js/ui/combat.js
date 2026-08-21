@@ -15,7 +15,7 @@
     if (s.ward) out += ' <span class="pip ward" title="Warded">◈</span>';
     return out;
   }
-  var INTENT = { strike: '⚔', aoe: '↯ sweep', windup: '… winding', silence: '🤫 silence', index: '✎ index', reforge: '⚒ reforge', echo: '↺ echo', systole: '✊ clench' };
+  var INTENT = { strike: '⚔', aoe: '↯ sweep', windup: '… winding', silence: '🤫 silence', index: '✎ index', reforge: '⚒ reforge', echo: '↺ echo', systole: '✊ clench', audit: '⚖ audit', levy: '✎ levy' };
   function intentGlyph(intent) {
     if (!intent) return '';
     return '<span class="sub" title="Next move">' + (INTENT[intent] || intent) + '</span>';
@@ -27,7 +27,17 @@
     var c = ex && ex.combat;
     if (!c) { UI.refresh(); return; }
 
-    panel.appendChild(h('h2', { text: 'Depth ' + ex.depth + ' — Round ' + c.round }));
+    panel.appendChild(h('h2', { text: (ex.vault ? 'Undervault, Stratum ' + ex.stratum : 'Depth ' + ex.depth) + ' — Round ' + c.round }));
+
+    // v7: the stratum's affixes ride the top of the fight
+    if (ex.vault && G.Vault && G.Vault.affixes().length) {
+      var abar = h('div.row', { style: 'gap:4px;flex-wrap:wrap;margin-bottom:6px' });
+      G.Vault.affixes().forEach(function (id) {
+        var a = G.DATA.affixDef(id); if (!a) return;
+        abar.appendChild(h('span', { title: a.blurb, text: a.name, style: 'font-size:11px;padding:2px 7px;border-radius:9px;background:hsla(' + a.hue + ',60%,40%,0.25);border:1px solid hsla(' + a.hue + ',70%,55%,0.6);color:hsl(' + a.hue + ',70%,78%)' }));
+      });
+      panel.appendChild(abar);
+    }
 
     // grit meter
     var gritCard = h('div.card');
@@ -59,7 +69,8 @@
         var bar = h('div.bar');
         bar.appendChild(h('i', { style: 'width:' + Math.round(100 * e.hp / e.maxHp) + '%;background:linear-gradient(90deg,#a24d42,#e06a5a)' }));
         card.appendChild(bar);
-        card.appendChild(h('div.sub', { text: e.hp + '/' + e.maxHp + (e.special === 'slow' ? ' · slow but heavy' : e.special === 'tithe' ? ' · collects marks' : e.special === 'lowest' ? ' · hunts the weak' : e.special === 'drain' ? ' · drinks wounds' : e.special === 'bleed' ? ' · opens wounds' : e.special === 'chill' ? ' · chilling' : e.special === 'want' ? ' · sings longing' : '') }));
+        var spTxt = { slow: ' · slow but heavy', tithe: ' · collects marks', lowest: ' · hunts the weak', drain: ' · drinks wounds', bleed: ' · opens wounds', chill: ' · chilling', want: ' · sings longing', backhunt: ' · hunts the back row', levy: ' · levies your Grit', ward: ' · brass composure' };
+        card.appendChild(h('div.sub', { text: e.hp + '/' + e.maxHp + (spTxt[e.special] || '') }));
       }
       panel.appendChild(card);
     });
@@ -71,9 +82,10 @@
       var active = c.awaiting === d.id;
       var card = h('div.card' + (active ? '.selected' : ''));
       var ds = c.dstat && c.dstat[d.id];
+      var rowTag = (ex.rows && G.Combat.rowOf(d) === 'back') ? ' · back' : (ex.rows && Object.keys(ex.rows).length ? ' · front' : '');
       card.appendChild(h('div.row', {}, [
         h('span.name', { html: (active ? '▶ ' : '') + d.name + statusPips(ds) }),
-        h('span.sub', { text: G.Delvers.cls(d).name + (c.shaken[d.id] ? ' · shaken' : '') + (c.guarding[d.id] ? ' · guarding' : '') + (c.taunt[d.id] ? ' · taunting' : '') })
+        h('span.sub', { text: G.Delvers.cls(d).name + rowTag + (c.shaken[d.id] ? ' · shaken' : '') + (c.guarding[d.id] ? ' · guarding' : '') + (c.taunt[d.id] ? ' · taunting' : '') })
       ]));
       var bar = h('div.bar.hp');
       bar.appendChild(h('i', { style: 'width:' + Math.round(100 * d.hp / mhp) + '%' }));
@@ -123,9 +135,18 @@
           onclick: function () { act({ type: 'beast', beastId: bdef.id, target: UI.combatTarget }); }
         }));
       });
+      // v7: shift the front/back line (costs the turn) — offered once a formation is set
+      var showShift = ex.rows && Object.keys(ex.rows).length > 0;
+      if (showShift) {
+        var curRow = G.Combat.rowOf(actor);
+        acts.appendChild(h('button', {
+          html: '⇄ <b>Shift ' + (curRow === 'front' ? 'back' : 'front') + '</b><br><span class="sub">move lines — costs the turn</span>',
+          onclick: function () { act({ type: 'shift' }); }
+        }));
+      }
       acts.appendChild(h('button.danger', {
         html: '🏃 <b>Flee</b><br><span class="sub">drop some loot; Scouts flee best</span>',
-        style: pack.length % 2 === 1 ? '' : 'grid-column:1/3',
+        style: (pack.length + (showShift ? 1 : 0)) % 2 === 1 ? '' : 'grid-column:1/3',
         onclick: function () { act({ type: 'flee' }); }
       }));
       panel.appendChild(acts);

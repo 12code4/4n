@@ -64,7 +64,7 @@
     A._droneBiome = biomeId;
     if (A._drone) { try { A._drone.stop(); } catch (e) {} A._drone = null; }
     if (!biomeId || !A.on) return;
-    var freqs = { gullet: 65, emberdeep: 55, archive: 73, veins: 49, heart: 82, town: 98 };
+    var freqs = { gullet: 65, emberdeep: 55, archive: 73, veins: 49, heart: 82, town: 98, undervault: 41 };
     var base = freqs[biomeId] || 65;
     var t = now();
     var o1 = A._ctx.createOscillator(); o1.type = 'sine'; o1.frequency.value = base;
@@ -110,6 +110,13 @@
     G.on('log', function (d) { if (d.k === 'loot') A.tone(880, 0.09, 'square', 0.07, 1100); });
     G.on('combatStart', function () { A.tone(140, 0.3, 'sawtooth', 0.14, 90); });
     G.on('mood', function () { A.tone(330, 0.6, 'sine', 0.1); });
+    // v7: the Undervault marks each new stratum with a ledger-tick chord under the drone
+    G.on('vault', function () {
+      if (!A._ctx || !A.on) return;
+      A.tone(82, 0.5, 'sine', 0.12, 55);          // a deep account-tone
+      A.noise(0.06, 0.06, 2200, 3);               // the tick of a stamp
+      setTimeout(function () { A.tone(1650, 0.05, 'square', 0.045); }, 140); // ledger stamp
+    });
   }
 
   /* click-to-tick for UI buttons (wired from main.js) */

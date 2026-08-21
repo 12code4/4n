@@ -22,6 +22,8 @@
   function beastPassive(k, base) { return G.Beasts ? G.Beasts.passive(k, base) : base; }
   function wildFury() { var c = C.cur(); return (c && c.wildFuryRound === c.round) ? 2 : 0; }
   function healScale() { return omenMult('healBonus') * (G.Beasts ? G.Beasts.passive('heal', 1) : 1); }
+  /* null-safe v7.0 Undervault affix check */
+  function vHas(id) { return G.Vault && G.Vault.has(id); }
 
   /* ---------- status effects (v4.0) ---------- */
   function estatus(e) { if (!e.status) e.status = { burn: 0, chill: 0, bleed: 0, ward: false }; return e.status; }
@@ -73,7 +75,8 @@
       // mood + omen + ascension enemy scaling (the Living Maw, meaner or milder)
       var ascHp = G.Ascension ? G.Ascension.enemyHp() : 1;
       var ascBoss = (def.boss && G.Ascension) ? G.Ascension.guardianHp() : 1;
-      var eScale = (def.boss ? 1 : s) * moodEnemy() * omenMult('enemyHp') * ascHp * ascBoss;
+      var giltHp = vHas('gilt') ? 1.25 : 1; // the Gilt affix swells the enemy with the loot it guards
+      var eScale = (def.boss ? 1 : s) * moodEnemy() * omenMult('enemyHp') * ascHp * ascBoss * giltHp;
       var hp = Math.max(1, Math.round(def.hp * eScale));
       var relSpd = relAdd('enemySpd');
       var dmgBonus = omenAdd('enemyDmg') + (G.Ascension ? G.Ascension.enemyDmg() : 0);
@@ -98,7 +101,7 @@
     ex.combat = {
       enemies: enemies, grit: G.U.clamp(startGrit, 0, G.BAL.gritMax), round: 0,
       queue: [], turn: -1, over: false, result: null,
-      guardian: !!opts.guardian, firstStrike: !!opts.firstStrike,
+      guardian: !!opts.guardian, firstStrike: !!opts.firstStrike, vaultGuardian: !!opts.vaultGuardian,
       brawl: !!opts.brawl, rivalId: opts.rivalId || null,
       guarding: {}, taunt: {}, shaken: {}, fledFail: false,
       reforged: 0, downed: {}, vanished: {}, revivified: false, unbroken: {},
@@ -155,6 +158,22 @@
     c.turn = -1;
     // tick taunts
     for (var k in c.taunt) { c.taunt[k]--; if (c.taunt[k] <= 0) delete c.taunt[k]; }
+    // Undervault affixes that tick at the top of a round
+    if (c.round > 1) {
+      var livingE = c.enemies.filter(function (e) { return e.hp > 0; });
+      if (vHas('interest') && livingE.length) {
+        // the enemy heals a little every round it stands
+        livingE.forEach(function (e) { var h = Math.max(1, Math.round(e.maxHp * 0.04)); e.hp = Math.min(e.maxHp, e.hp + h); });
+        G.Exp.elog('Interest accrues — the dark mends what you marked.', 'bad');
+      }
+      c.enemies.forEach(function (e) { e.charged = false; });
+      if (vHas('echoing') && livingE.length) {
+        // the dark rehearses the Heart: one foe charges a heavy blow this round
+        var ch = G.rpick(livingE); ch.charged = true;
+        G.Exp.elog(ch.name + ' draws in an echo of the Heart — its next blow will land hard.', 'bad');
+        G.emit('fx', { t: 'windup', uid: ch.uid });
+      }
+    }
     // compute enemy intents for the coming round (telegraphed to the UI)
     c.enemies.forEach(function (e) { if (e.hp > 0) e.intent = C.enemyIntent(e); });
   };
@@ -292,6 +311,14 @@
         if (!bid || !C.beastReady(bid)) { c.awaiting = d.id; return { ok: false, msg: 'That beast is not ready yet.' }; }
         C.useBeast(bid);
         break; // the beast acts on the delver's turn; the delver still passes
+      }
+      case 'shift': {
+        var ex2 = G.state.expedition;
+        if (!ex2.rows) ex2.rows = {};
+        var now = C.rowOf(d);
+        ex2.rows[d.id] = (now === 'front') ? 'back' : 'front';
+        G.Exp.elog(d.name + ' shifts to the ' + ex2.rows[d.id] + ' line.', 'info');
+        break; // shifting takes the turn
       }
     }
     if (!C.checkEnd()) C.advance();
@@ -515,6 +542,13 @@
       var m = G.rint(def.marks[0], def.marks[1]);
       if (m > 0) { ex.marksFound += m; }
     }
+    // Undervault "Ledger" affix: each kill compounds the stratum's take
+    if (vHas('ledger')) {
+      ex.ledgerStacks = (ex.ledgerStacks || 0) + 1;
+      var comp = ex.ledgerStacks * 2;
+      ex.marksFound += comp;
+      G.Exp.elog('The Ledger compounds: +' + comp + 'ᵯ (×' + ex.ledgerStacks + ').', 'loot');
+    }
     var xp = G.BAL.xpPerEnemy(ex.depth, e.maxHp) * (def.boss ? G.BAL.guardianXp : 1) * relMult('xpMult');
     var team = G.Exp.team();
     team.forEach(function (d) { G.Delvers.gainXp(d, Math.ceil(xp / team.length)); });
@@ -527,6 +561,15 @@
     var c = C.cur();
     return G.Exp.team().filter(function (d) { return !(c && c.downed[d.id]); });
   };
+
+  /* ---------- front/back rows (v7.0) ---------- */
+  C.rowOf = function (d) { var ex = G.state.expedition; return (ex && ex.rows && ex.rows[d.id]) || 'front'; };
+  C.backStanding = function () { return C.standing().filter(function (d) { return C.rowOf(d) === 'back'; }); };
+  C.frontStanding = function () { return C.standing().filter(function (d) { return C.rowOf(d) === 'front'; }); };
+  /* who an ordinary blow can reach: the front line, or the back if the front has fallen */
+  C.exposed = function () { var f = C.frontStanding(); return f.length ? f : C.standing(); };
+  /* who a back-line hunter reaches: the back line if any stand, else whoever is exposed */
+  C.backTargets = function () { var b = C.backStanding(); return b.length ? b : C.exposed(); };
 
   /* ---------- enemy turns ---------- */
   C.enemyAct = function (e) {
@@ -571,6 +614,19 @@
         return;
       }
       action = 'aoe'; // out of solder — it lashes out instead
+    }
+
+    // The Lord Exchequer's audit: it calls a Court noble to the field (resolved by the summon block below)
+    if (action === 'audit') {
+      action = (c.enemies.filter(function (x) { return x.hp > 0; }).length < 5)
+        ? 'summon:' + (G.Vault ? G.Vault.auditNoble() : 'court_collector') : 'aoe';
+    }
+    // The Magistrate's levy: it notarises away the team's Grit, then lashes out
+    if (action === 'levy') {
+      var lvd = Math.min(c.grit, G.rint(2, 4));
+      c.grit -= lvd;
+      G.Exp.elog(e.name + ' passes a levy — the team loses ' + lvd + ' Grit.', 'bad');
+      action = 'strike';
     }
 
     if (action.indexOf('summon:') === 0) {
@@ -646,17 +702,21 @@
     }
 
     if (action === 'strike') {
-      // targeting
+      // targeting — taunts override; a back-line hunter reaches past the front;
+      // otherwise the front line is struck (or the back, once the front has fallen)
       var target = null;
       var taunters = team.filter(function (d) { return c.taunt[d.id]; });
+      var pool = (e.special === 'backhunt') ? C.backTargets() : C.exposed();
+      if (!pool.length) pool = team;
       if (taunters.length) target = G.rpick(taunters);
       else if (e.special === 'lowest') {
-        target = team[0];
-        team.forEach(function (d) { if (d.hp < target.hp) target = d; });
-      } else target = G.rpick(team);
+        target = pool[0];
+        pool.forEach(function (d) { if (d.hp < target.hp) target = d; });
+      } else target = G.rpick(pool);
 
       var dmg = G.rint(e.dmg[0], e.dmg[1]);
       if (e.special === 'slow') dmg = Math.round(dmg * 1.5);
+      if (e.charged) { dmg = Math.round(dmg * 1.5); e.charged = false; G.Exp.elog(e.name + ' looses the Heart’s echo!', 'bad'); } // Echoing affix
       if (chilled(estatus(e))) dmg = Math.round(dmg * 0.7); // a chilled enemy hits softer
       dmg = Math.round(dmg * chorus);
       var crit = G.rchance(e.crit);
@@ -665,17 +725,26 @@
       if (c.indexedDelver === target.id) { dmg = Math.round(dmg * 2); c.indexedDelver = null; G.Exp.elog(e.name + ' corrects the citation — the blow lands double!', 'bad'); }
       var dealt = C.damageDelver(target, dmg, e, crit);
 
-      // Veins specials ride the strike
+      // Veins / Deep Court specials ride the strike
       if (e.special === 'drain' && dealt > 0) { e.hp = Math.min(e.maxHp, e.hp + Math.round(dealt * 0.6)); G.Exp.elog(e.name + ' drinks the wound and warms (+' + Math.round(dealt * 0.6) + ').', 'bad'); }
       if (e.special === 'bleed' && target.alive) { C.applyStatus(target.id, 'bleed', 3); G.Exp.elog(target.name + ' is bleeding.', 'bad'); }
       if (e.special === 'chill' && target.alive) { C.applyStatus(target.id, 'chill', 2); G.Exp.elog(target.name + ' is chilled to the bone.', 'bad'); }
       if (e.special === 'want' && target.alive && !c.skipNext[target.id]) { c.skipNext[target.id] = true; G.Exp.elog(target.name + ' falters, listening to the Chorus.', 'bad'); }
+      // the Notary's levy: a hit also drains the team's shared Grit
+      if (e.special === 'levy' && c.grit > 0) { var lv = Math.min(c.grit, G.rint(1, 2)); c.grit -= lv; G.Exp.elog(e.name + ' notarises away ' + lv + ' Grit.', 'bad'); }
 
       if (e.special === 'tithe' && ex.marksFound > 0) {
         var steal = Math.min(ex.marksFound, G.rint(1, 3));
         ex.marksFound -= steal;
         G.Exp.elog(e.name + ' collects ' + steal + 'ᵯ into its bowl.', 'bad');
       }
+    }
+
+    // Undervault "Tithe" affix: every landed blow also skims the haul
+    if (action !== 'aoe' && vHas('tithe') && ex.marksFound > 0) {
+      var t2 = Math.min(ex.marksFound, G.rint(1, 2));
+      ex.marksFound -= t2;
+      G.Exp.elog('The Tithe takes its due — ' + t2 + 'ᵯ gone from the count.', 'bad');
     }
   };
 
@@ -789,10 +858,23 @@
     if (!living.length) {
       c.over = true; c.result = 'won';
       var wasGuardian = c.guardian;
+      var wasVaultGuardian = c.vaultGuardian;
       var wasBrawl = c.brawl, rivalId = c.rivalId;
       var noDeaths = !(c.diedThisFight && Object.keys(c.diedThisFight).length);
       ex.combat = null;
-      if (wasBrawl) {
+      if (wasVaultGuardian) {
+        // a Court guardian falls: no biome unlock, but a Court relic and a bonus haul
+        if (G.Relics) {
+          var courtRel = { lord_exchequer: 'court_seal', the_magistrate: 'court_scepter' }[G.Vault ? G.Vault.guardianFor(ex.stratum) : ''];
+          if (courtRel) G.Relics.award(courtRel);
+          // the nobles' regalia trickle in as you break their offices
+          if (G.rchance(0.5)) G.Relics.award(G.rpick(['court_mask', 'court_ledger']));
+        }
+        G.Exp.grantLootValue(20 + ex.depth * 3);
+        if (G.Renown) G.Renown.award('guardian');
+        G.Exp.elog('The Court office falls. The stratum below stands open.', 'good');
+        ex.mode = 'guardian_won';
+      } else if (wasBrawl) {
         // brawl won: bonus loot + renown, the rival concedes the stair
         G.Exp.grantLootValue(10 + ex.depth * 3);
         ex.marksFound += G.rint(4, 10);

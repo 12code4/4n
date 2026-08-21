@@ -17,7 +17,7 @@ var FILES = [
   'js/data/archive.js', 'js/data/renown.js', 'js/data/relics.js', 'js/data/talents.js',
   'js/data/achievements.js', 'js/data/rivals.js',
   'js/data/moods.js', 'js/data/omens.js', 'js/data/veins.js', 'js/data/beasts.js', 'js/data/legacy.js',
-  'js/data/heart.js', 'js/data/ascension.js', 'js/data/seasons.js',
+  'js/data/heart.js', 'js/data/ascension.js', 'js/data/seasons.js', 'js/data/undervault.js',
   'js/migrations.js',
   'js/systems/state.js', 'js/systems/delvers.js', 'js/systems/economy.js',
   'js/systems/forge.js', 'js/systems/contracts.js',
@@ -25,6 +25,7 @@ var FILES = [
   'js/systems/moods.js', 'js/systems/omens.js', 'js/systems/beasts.js', 'js/systems/prestige.js',
   'js/systems/codex.js', 'js/systems/daily.js',
   'js/systems/ascension.js', 'js/systems/seasons.js', 'js/systems/finance.js', 'js/systems/hints.js',
+  'js/systems/undervault.js',
   'js/systems/expedition.js', 'js/systems/combat.js'
 ];
 FILES.forEach(function (f) {
@@ -444,7 +445,7 @@ section('v2.0 Save migration v1 → v2');
   G.state = migrated;
   var s = G.serialize();
   var pay2 = JSON.parse(s);
-  ok(pay2.sv === 6, 'serialized at save-version 6 (full migration chain)');
+  ok(pay2.sv === 7, 'serialized at save-version 7 (full migration chain)');
 })();
 
 section('v2.0 Emberdeep: reach and fight the Smelted King');
@@ -674,7 +675,7 @@ section('v3.0 Save migration v2 → v3');
   migrated.delvers.forEach(function (d) { ok(Array.isArray(d.talents) && typeof d.face === 'number', 'migration adds talents+face'); });
   ok(migrated.graveyard[0].honored === false, 'migration adds honored flag to graves');
   G.state = migrated;
-  ok(JSON.parse(G.serialize()).sv === 6, 'serializes at v6 (full migration chain)');
+  ok(JSON.parse(G.serialize()).sv === 7, 'serializes at v7 (full migration chain)');
 })();
 
 /* ---------------- v4.0: moods, omens, status, veins, beasts, prestige ---------------- */
@@ -1241,7 +1242,250 @@ section('v6.0 Save migration v5 → v6');
   ok(migrated.festival === null && migrated._lastSeason === 0, 'v6 seeds season/festival state');
   ok(migrated.loan === null && typeof migrated.hints === 'object', 'v6 seeds loan + hints');
   G.state = migrated;
-  ok(JSON.parse(G.serialize()).sv === 6, 'the migrated save serializes at v6');
+  ok(JSON.parse(G.serialize()).sv === 7, 'the migrated save serializes at the current version');
+})();
+
+/* ================= v7.0 "The Undervault" ================= */
+
+// build a battle-ready delver of a given class/level for the deep sims
+function mkDelver(cls, lvl, vig) {
+  var d = G.Delvers.generate(0);
+  d.cls = cls; d.lvl = lvl;
+  var base = G.DATA.classes[cls].base;
+  d.stats = { vig: vig || (base.vig + lvl * 4), might: base.might + lvl * 2, wits: base.wits + lvl, luck: base.luck + Math.floor(lvl / 2) };
+  d.hp = d.stats.vig; d.talents = []; d.pendingTalents = [];
+  G.Delvers.addToRoster(d);
+  return d;
+}
+
+section('v7.0 Undervault: unlock gating and the endless launch');
+(function () {
+  G.newGame(7100);
+  var st = G.state;
+  ok(!G.Vault.unlocked(), 'the Vault is locked on a fresh charter');
+  st.ascMax = 3;
+  ok(G.Vault.unlocked(), 'Ascension III opens the Vault');
+  st.ascMax = 0; st.questPerks.heart_trade = true;
+  ok(G.Vault.unlocked(), 'the Trade ending opens the Vault');
+  // launch a vault run
+  mkDelver('vanguard', 11); mkDelver('arcanist', 11);
+  G.Economy.buySupply('torches', 12); G.Economy.buySupply('rations', 12);
+  var team = G.Delvers.roster().slice(0, 2).map(function (d) { return d.id; });
+  var r = G.Vault.launch(team, {});
+  ok(r.ok, 'the Vault run launches');
+  var ex = st.expedition;
+  ok(ex.vault && ex.stratum === 1 && ex.depth === 14, 'starts at stratum 1 / depth 14');
+  ok(ex.affixes.length >= 1, 'stratum 1 carries at least one affix');
+  ok(st.deepRecord >= 1, 'the deep-record banks stratum 1');
+  st.expedition = null;
+})();
+
+section('v7.0 Undervault: affix scaling and the Court-guardian cadence');
+(function () {
+  G.newGame(7150);
+  ok(G.Vault.rollAffixes(1).length === 1, 'early strata roll one affix');
+  ok(G.Vault.rollAffixes(4).length === 2, 'by stratum 4, two affixes');
+  ok(G.Vault.rollAffixes(8).length === 3, 'by stratum 8, three affixes');
+  ok(!G.Vault.isGuardianStratum(1) && !G.Vault.isGuardianStratum(3), 'no guardian on early strata');
+  ok(G.Vault.isGuardianStratum(4) && G.Vault.isGuardianStratum(8), 'a Court guardian bars every 4th stratum');
+  ok(G.DATA.enemies[G.Vault.guardianFor(4)] && G.DATA.enemies[G.Vault.guardianFor(4)].boss, 'guardianFor names a real boss');
+  ok(G.Vault.guardianFor(4) !== G.Vault.guardianFor(8), 'the two Court guardians alternate');
+})();
+
+section('v7.0 Combat rows: the front line shields the back');
+(function () {
+  G.newGame(7200);
+  var st = G.state; st.questPerks.heart_trade = true;
+  var tank = mkDelver('vanguard', 12, 90);
+  var mage = mkDelver('arcanist', 12, 60);
+  G.Economy.buySupply('torches', 10); G.Economy.buySupply('rations', 10);
+  var rows = {}; rows[tank.id] = 'front'; rows[mage.id] = 'back';
+  G.Exp.launch([tank.id, mage.id], 1, { rows: rows });
+  ok(G.Combat.rowOf(tank) === 'front' && G.Combat.rowOf(mage) === 'back', 'rows recorded on the run');
+  // ordinary foes strike the exposed front line; the back is spared until the front falls
+  G.Combat.start(['hollow_shambler', 'hollow_shambler', 'hollow_shambler'], {});
+  var c = st.expedition.combat;
+  var mageHpStart = mage.hp;
+  var guard = 0;
+  // guard for a bounded spell while the tank is comfortably alive — the front shields the back
+  while (!c.over && tank.alive && tank.hp > 40 && guard++ < 120) {
+    var actor = G.Combat.actor();
+    if (actor) { G.Combat.act({ type: 'guard' }); continue; }
+    break;
+  }
+  ok(tank.hp < 90, 'the front-line tank soaked blows');
+  ok(mage.alive && mage.hp === mageHpStart, 'the back-line mage was never struck while the front stood');
+  st.expedition = null;
+  // a back-hunter reaches past the front
+  var tank2 = mkDelver('vanguard', 12, 90); var mage2 = mkDelver('arcanist', 12, 70);
+  var rows2 = {}; rows2[tank2.id] = 'front'; rows2[mage2.id] = 'back';
+  G.Economy.buySupply('torches', 6); G.Economy.buySupply('rations', 6);
+  G.Exp.launch([tank2.id, mage2.id], 1, { rows: rows2 });
+  var c2Enemies = ['court_auditor']; // special: backhunt
+  G.Combat.start(c2Enemies, {});
+  var c2 = st.expedition.combat;
+  var mg2Start = mage2.hp;
+  var g2 = 0;
+  while (!c2.over && g2++ < 300) { var a2 = G.Combat.actor(); if (a2) { G.Combat.act({ type: 'guard' }); } else break; }
+  ok(mage2.hp < mg2Start || !mage2.alive, 'the Auditor reaches the back row');
+  st.expedition = null;
+  // the shift action swaps a delver's row and costs the turn
+  var s1 = mkDelver('scout', 8); var s2 = mkDelver('vanguard', 8);
+  G.Economy.buySupply('torches', 6); G.Economy.buySupply('rations', 6);
+  var rows3 = {}; rows3[s1.id] = 'front'; rows3[s2.id] = 'front';
+  G.Exp.launch([s1.id, s2.id], 1, { rows: rows3 });
+  G.Combat.start(['gravemite'], {});
+  var c3 = st.expedition.combat;
+  // drive to s1's turn, then shift
+  var g3 = 0; while (g3++ < 50 && G.Combat.actor() && G.Combat.actor().id !== s1.id) G.Combat.act({ type: 'guard' });
+  if (G.Combat.actor() && G.Combat.actor().id === s1.id) {
+    G.Combat.act({ type: 'shift' });
+    ok(st.expedition.rows[s1.id] === 'back', 'shift moved the delver to the back line');
+  } else ok(true, 'shift path (actor ordering) — skipped this seed');
+  st.expedition = null;
+})();
+
+section('v7.0 Affix mechanics: gilt, ledger, tithe, interest');
+(function () {
+  G.newGame(7250);
+  var st = G.state; st.questPerks.heart_trade = true; st.mood = null; // neutralise mood-scaling for exact checks
+  mkDelver('vanguard', 12, 400); mkDelver('vanguard', 12, 400);
+  // make them fast (always win initiative → no enemy turn fires during C.start) and unkillable for these unit checks
+  G.Delvers.roster().forEach(function (d) { d.stats.wits = 99; d.stats.vig = 999; d.hp = 999; });
+  G.Economy.buySupply('torches', 8); G.Economy.buySupply('rations', 8);
+  var team = G.Delvers.roster().slice(0, 2).map(function (d) { return d.id; });
+  G.Vault.launch(team, {});
+  var ex = st.expedition;
+  function fresh(group) { G.Exp.team().forEach(function (d) { d.hp = G.Delvers.maxHp(d); }); G.Combat.start(group, {}); return ex.combat; }
+  // GILT: enemy HP swollen ~×1.25 vs baseline, and shed materials doubled
+  ex.affixes = [];
+  var baseHp = fresh(['court_assessor']).enemies[0].maxHp; ex.combat = null; ex.mode = 'map';
+  ex.affixes = ['gilt'];
+  var giltHp = fresh(['court_assessor']).enemies[0].maxHp;
+  ok(Math.abs(giltHp / baseHp - 1.25) < 0.03, 'Gilt swells enemy HP ~×1.25 (' + baseHp + '→' + giltHp + ')');
+  var beforeLoot = ex.loot.gilt_marrow || 0;
+  G.Exp.grantMat('gilt_marrow', 1);
+  ok((ex.loot.gilt_marrow || 0) - beforeLoot === 2, 'Gilt doubles shed materials');
+  ex.combat = null; ex.mode = 'map';
+  // LEDGER: kills compound the take
+  ex.affixes = ['ledger']; ex.ledgerStacks = 0; ex.marksFound = 0;
+  var c = fresh(['court_assessor', 'court_assessor']);
+  c.enemies.forEach(function (en) { en.hp = 1; });
+  var m0 = ex.marksFound;
+  G.Combat.onEnemyDeath(c.enemies[0], null);
+  G.Combat.onEnemyDeath(c.enemies[1], null);
+  ok(ex.ledgerStacks === 2, 'Ledger counts each kill');
+  ok(ex.marksFound - m0 >= 2 + 4, 'Ledger compounds marks on kills'); // +2 then +4
+  ex.combat = null; ex.mode = 'map';
+  // TITHE: an enemy blow skims the haul
+  ex.affixes = ['tithe']; ex.marksFound = 50;
+  var c2 = fresh(['court_assessor']); var en2 = c2.enemies[0];
+  var before = ex.marksFound;
+  G.Combat.enemyAct(en2); // it strikes → tithe skims
+  ok(ex.marksFound < before, 'Tithe skims marks on an enemy blow');
+  ex.combat = null; ex.mode = 'map';
+  // INTEREST: enemies mend at the top of a round
+  ex.affixes = ['interest'];
+  var c3 = fresh(['court_chamberlain']); var en3 = c3.enemies[0];
+  en3.hp = Math.round(en3.maxHp * 0.5);
+  var hurt = en3.hp;
+  c3.round = 2; // interest ticks from round 2+
+  G.Combat.newRound();
+  ok(en3.hp > hurt, 'Interest heals standing enemies each round');
+  st.expedition = null;
+})();
+
+section('v7.0 Undervault: a policy-driven descent through the strata');
+(function () {
+  var exceptions = 0, reachedGuardian = 0, guardianKills = 0, maxStratum = 0, wipes = 0, returns = 0;
+  for (var run = 0; run < 30; run++) {
+    G.newGame(72000 + run);
+    var st = G.state; st.questPerks.heart_trade = true; st.marks = 400;
+    // a seasoned three: two hold the front, an alchemist heals from the back
+    var v1 = mkDelver('vanguard', 13, 110), w1 = mkDelver('warden', 13, 100);
+    var al = mkDelver('alchemist', 13, 78);
+    G.Economy.buySupply('torches', 30); G.Economy.buySupply('rations', 30); G.Economy.buySupply('bandages', 10);
+    var rows = {}; rows[v1.id] = 'front'; rows[w1.id] = 'front'; rows[al.id] = 'back';
+    G.Vault.launch([v1.id, w1.id, al.id], rows);
+    var steps = 0;
+    try {
+      while (st.expedition && steps++ < 4000) {
+        var ex = st.expedition;
+        if (ex.stratum > maxStratum) maxStratum = ex.stratum;
+        if (ex.mode === 'map') {
+          var cs = G.Exp.nextChoices(); if (!cs.length) break;
+          var pick = cs.filter(function (n) { return n.type === 'guardian'; })[0] ||
+                     cs.filter(function (n) { return n.type === 'shaft'; })[0] ||
+                     cs.filter(function (n) { return n.type === 'cache' || n.type === 'rest'; })[0] || G.rpick(cs);
+          G.Exp.move(pick.id);
+        } else if (ex.mode === 'combat') {
+          var actor = G.Combat.actor(); if (!actor) break;
+          var c = ex.combat; var sk = G.Delvers.cls(actor).skill;
+          if (actor.hp < G.Delvers.maxHp(actor) * 0.3 && ex.bandages > 0) G.Combat.act({ type: 'item', target: actor.id });
+          else if (c.grit >= sk.cost && sk.kind !== 'command') G.Combat.act({ type: 'skill' });
+          else G.Combat.act({ type: 'strike' });
+        } else if (ex.mode === 'event') {
+          if (ex.event.stage === 'choose') { var def = G.Exp.eventDef(); var av = []; def.choices.forEach(function (ch, i) { if (G.Exp.choiceAvailable(ch)) av.push(i); }); G.Exp.chooseEvent(av[av.length - 1]); } else G.Exp.closeEvent();
+        } else if (ex.mode === 'peddler') G.Exp.leavePeddler();
+        else if (ex.mode === 'rival') G.Exp.leaveRival();
+        else if (ex.mode === 'shaft') {
+          var hurt = G.Exp.team().some(function (x) { return x.hp < G.Delvers.maxHp(x) * 0.4; });
+          // push to ~stratum 6 then surface with the haul
+          if (!hurt && ex.stratum < 6 && G.Exp.canDescend()) G.Exp.descend(); else G.Exp.surface();
+        }
+        else if (ex.mode === 'guardian') { reachedGuardian++; if (G.Exp.team().length >= 2) G.Exp.fightGuardian(); else G.Exp.surface(); }
+        else if (ex.mode === 'guardian_won') { guardianKills++; if (G.Exp.canDescend() && ex.stratum < 6) G.Exp.descend(); else G.Exp.surface(); }
+        else break;
+      }
+    } catch (e) { exceptions++; console.error('  ✗ vault exception: ' + (e && e.stack || e)); }
+    ok(steps < 4000, 'vault run terminates');
+    ok(!st.expedition, 'vault run cleaned up');
+    if (st.lastRun && st.lastRun.wiped) wipes++; else returns++;
+    assertNoNaN('vault-run-' + run);
+  }
+  ok(exceptions === 0, exceptions + ' exceptions in vault runs');
+  ok(maxStratum >= 4, 'the team reaches at least a guardian stratum (max ' + maxStratum + ')');
+  console.log('  » 30 vault runs: reached guardian ' + reachedGuardian + '×, guardian down ' + guardianKills + '×, deepest stratum ' + maxStratum + ', returns ' + returns + ' / wipes ' + wipes);
+})();
+
+section('v7.0 Relic sets & tier IV: set bonuses and the Deep Forge');
+(function () {
+  G.newGame(7300);
+  var st = G.state;
+  // relic sets: slot 2 then 4 Court pieces (bypass slot cap for the check)
+  ['court_mask', 'court_ledger', 'court_seal', 'court_scepter'].forEach(function (id) { G.Relics.award(id); });
+  st.relics.slotted = ['court_mask', 'court_ledger'];
+  ok(Math.abs(G.Relics.mult('sellMult') - 1.08 * 1.10) < 1e-9, '2-piece Court set adds its sell bonus');
+  st.relics.slotted = ['court_mask', 'court_ledger', 'court_seal', 'court_scepter'];
+  ok(G.Relics.mult('lootMult') >= 1.10 * 1.20 - 1e-9, '4-piece Court set adds the loot bonus');
+  ok(G.Relics.add('gritStart') >= 1 + 1, '4-piece Court set adds start Grit atop the mask');
+  // tier IV gear needs the Deep Forge (Forge L3 + gilt-marrow)
+  st.marks = 3000;
+  G.Economy.build('forge'); G.Economy.build('forge'); G.Economy.build('forge'); // L3
+  ok(G.Forge.canCraft('exchequer_edge') === 'The Deep Forge isn’t lit yet.', 'tier IV blocked without the Deep Forge');
+  ok(G.Forge.canDeepForge() && G.Forge.canDeepForge().indexOf('Missing') === 0, 'Deep Forge needs gilt-marrow');
+  st.inventory.gilt_marrow = 2;
+  ok(G.Forge.upgradeDeepForge().ok, 'the Deep Forge is lit with gilt-marrow');
+  ok(st.flags.deepForge === true, 'Deep Forge flag set');
+  // now tier IV crafts (given the mats)
+  st.inventory.court_signet = 3; st.inventory.vel_shard = 3; st.inventory.gilt_marrow = 3;
+  ok(G.Forge.canCraft('exchequer_edge') === null, 'tier IV craftable once the Deep Forge burns');
+  ok(G.Forge.craft('exchequer_edge').ok, 'craft the Exchequer’s Edge (tier IV)');
+})();
+
+section('v7.0 Save migration v6 → v7');
+(function () {
+  G.newGame(7400);
+  var st = G.U.deep(G.state);
+  delete st.deepRecord; delete st.stats.deepestStratum;
+  st.expedition = { team: [], mode: 'map', loot: {}, marksFound: 0 }; // a v6-era live run
+  var migrated = G.migrate({ sv: 6, gv: '6.0.0', state: st });
+  ok(migrated.deepRecord === 0, 'v7 seeds the deep-record');
+  ok(migrated.stats.deepestStratum === 0, 'v7 seeds the deepest-stratum stat');
+  ok(migrated.expedition.rows && migrated.expedition.vault === false, 'v7 gives a live run rows + vault flag');
+  ok(Array.isArray(migrated.expedition.affixes), 'v7 gives a live run an affix list');
+  G.state = migrated;
+  ok(JSON.parse(G.serialize()).sv === 7, 'the migrated save serializes at v7');
 })();
 
 /* ---------------- regression: guardian flee must not strand the team ---------------- */

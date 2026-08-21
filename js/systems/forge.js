@@ -4,12 +4,38 @@
   var F = (G.Forge = {});
 
   F.tier = function () { return G.bldFx('forge', 'tier', 0); };
+  F.hasDeepForge = function () { return !!(G.state.flags && G.state.flags.deepForge); };
+  /* tier IV needs Forge L3 AND the Deep Forge upgrade (bought below the Heart's materials) */
+  F.DEEP_COST = { marks: 260, mat: 'gilt_marrow', qty: 2 };
+  F.canDeepForge = function () {
+    var st = G.state;
+    if (F.hasDeepForge()) return 'The Deep Forge already burns.';
+    if (F.tier() < 3) return 'The Forge must reach L3 first.';
+    if (st.marks < F.DEEP_COST.marks) return 'Not enough marks.';
+    if ((st.inventory[F.DEEP_COST.mat] || 0) < F.DEEP_COST.qty) return 'Missing ' + G.DATA.materials[F.DEEP_COST.mat].name + '.';
+    return null;
+  };
+  F.upgradeDeepForge = function () {
+    var err = F.canDeepForge();
+    if (err) return { ok: false, msg: err };
+    var st = G.state;
+    st.marks -= F.DEEP_COST.marks; st.stats.spent += F.DEEP_COST.marks;
+    st.inventory[F.DEEP_COST.mat] -= F.DEEP_COST.qty;
+    if (st.inventory[F.DEEP_COST.mat] <= 0) delete st.inventory[F.DEEP_COST.mat];
+    st.flags.deepForge = true;
+    G.log('The Deep Forge is stoked on gilt-marrow. Tier IV patterns are yours to work.', 'story');
+    G.emit('armory');
+    return { ok: true };
+  };
+  /* the effective craftable tier: 4 once the Deep Forge is lit, else the building tier */
+  F.craftTier = function () { return F.hasDeepForge() ? 4 : F.tier(); };
 
   F.canCraft = function (gearId) {
     var st = G.state;
     var def = G.DATA.gear[gearId];
     if (!def) return 'Unknown pattern.';
-    if (def.tier > F.tier()) return 'The forge can’t work tier ' + def.tier + ' yet.';
+    if (def.tier >= 4 && !F.hasDeepForge()) return 'The Deep Forge isn’t lit yet.';
+    if (def.tier > F.craftTier()) return 'The forge can’t work tier ' + def.tier + ' yet.';
     if (st.marks < def.cost.marks) return 'Not enough marks.';
     for (var id in (def.cost.mats || {})) {
       if ((st.inventory[id] || 0) < def.cost.mats[id]) return 'Missing ' + G.DATA.materials[id].name + '.';

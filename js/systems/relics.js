@@ -36,18 +36,37 @@
     G.emit('relic');
   };
 
-  /* Combined fx across all slotted relics. */
+  /* which relic-set bonuses are live, given what's slotted (v7.0). */
+  Rel.activeSetBonuses = function () {
+    var sets = G.DATA.relicSets || {};
+    var slotted = Rel.slotted();
+    var out = [];
+    for (var sid in sets) {
+      var def = sets[sid];
+      var n = 0;
+      def.pieces.forEach(function (p) { if (slotted.indexOf(p) >= 0) n++; });
+      if (def.bonus4 && n >= 4) out.push(def.bonus4);
+      if (def.bonus2 && n >= 2) out.push(def.bonus2);
+    }
+    return out;
+  };
+
+  function foldFx(v, key, fx) {
+    if (!fx || fx[key] === undefined) return v;
+    if (key.indexOf('Mult') >= 0) v = (v === undefined ? 1 : v) * fx[key];
+    else if (typeof fx[key] === 'boolean') v = v || fx[key];
+    else v = (v || 0) + fx[key];
+    return v;
+  }
+
+  /* Combined fx across all slotted relics, plus any active relic-set bonuses. */
   Rel.fx = function (key, base) {
     var v = base;
     Rel.slotted().forEach(function (id) {
       var r = G.DATA.relics[id];
-      if (r && r.fx && r.fx[key] !== undefined) {
-        // multipliers multiply; additive/flags add/or
-        if (key.indexOf('Mult') >= 0) v = (v === undefined ? 1 : v) * r.fx[key];
-        else if (typeof r.fx[key] === 'boolean') v = v || r.fx[key];
-        else v = (v || 0) + r.fx[key];
-      }
+      if (r) v = foldFx(v, key, r.fx);
     });
+    Rel.activeSetBonuses().forEach(function (b) { v = foldFx(v, key, b.fx); });
     return v;
   };
   Rel.flag = function (key) { return Rel.fx(key, false); };

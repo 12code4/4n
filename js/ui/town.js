@@ -265,6 +265,9 @@
     panel.appendChild(h('h2', { text: 'Outfit the Expedition' }));
     panel.appendChild(h('p.sub', { text: 'Pick up to ' + G.BAL.teamMax + '. The team carries all company supplies; what they don’t burn comes home.' }));
 
+    if (!UI.sel.rows) UI.sel.rows = {};
+    function defaultRow(d) { return (d.cls === 'arcanist' || d.cls === 'alchemist') ? 'back' : 'front'; }
+
     panel.appendChild(h('h3', { text: 'Team' }));
     G.Delvers.roster().forEach(function (d) {
       var selected = UI.sel.team.indexOf(d.id) >= 0;
@@ -273,11 +276,26 @@
         onclick: function () {
           var i = UI.sel.team.indexOf(d.id);
           if (i >= 0) UI.sel.team.splice(i, 1);
-          else if (UI.sel.team.length < G.BAL.teamMax) UI.sel.team.push(d.id);
+          else if (UI.sel.team.length < G.BAL.teamMax) { UI.sel.team.push(d.id); if (!UI.sel.rows[d.id]) UI.sel.rows[d.id] = defaultRow(d); }
           UI.refresh();
         }
       }));
     });
+
+    // v7: front/back formation — the front line shields the back
+    if (UI.sel.team.length) {
+      panel.appendChild(h('h3', { text: 'Formation' }));
+      panel.appendChild(h('p.sub', { text: 'The front line takes the blows and shields the back. Some deep foes hunt the back row — place your fragile casters with care.', style: 'margin-bottom:4px' }));
+      UI.sel.team.forEach(function (id) {
+        var d = G.Delvers.get(id); if (!d) return;
+        var rw = UI.sel.rows[id] || defaultRow(d);
+        panel.appendChild(h('div.row', { style: 'gap:6px;align-items:center;margin:2px 0' }, [
+          h('span', { text: d.name + ' — ' + G.U.cap(d.cls), style: 'flex:1' }),
+          h('button.small' + (rw === 'front' ? '.primary' : ''), { text: 'Front', onclick: function () { UI.sel.rows[id] = 'front'; UI.refresh(); } }),
+          h('button.small' + (rw === 'back' ? '.primary' : ''), { text: 'Back', onclick: function () { UI.sel.rows[id] = 'back'; UI.refresh(); } })
+        ]));
+      });
+    }
 
     panel.appendChild(h('h3', { text: 'Starting depth' }));
     var row = h('div.row', { style: 'gap:6px;justify-content:flex-start;flex-wrap:wrap' });
@@ -354,12 +372,30 @@
       style: 'width:100%;padding:12px;font-size:15px',
       disabled: !!err,
       onclick: function () {
-        var r = G.Exp.launch(UI.sel.team, UI.sel.depth);
+        var r = G.Exp.launch(UI.sel.team, UI.sel.depth, { rows: UI.sel.rows });
         if (!r.ok) UI.toast(r.msg, 'bad');
         UI.refresh();
       }
     }));
     if (err) panel.appendChild(h('p.sub', { text: err, style: 'margin-top:4px' }));
+
+    // v7: the Undervault — an endless descent below the Heart
+    if (G.Vault && G.Vault.unlocked()) {
+      var rec = G.Vault.deepRecord();
+      panel.appendChild(h('div.card', { style: 'margin-top:10px;border-color:#5a3a7a' }, [
+        h('div.row', {}, [h('span.name', { text: '▽ Descend the Undervault' }), h('span.sub', { text: rec ? 'record: stratum ' + rec : 'unexplored', style: 'color:var(--brass-hi)' })]),
+        h('p.sub', { text: 'Below the Heart, the Maw keeps its true accounts — endless strata, each with its own terms, and no bottom. Take what you can carry and climb back before the dark keeps you.', style: 'margin-top:2px' })
+      ]));
+      var vErr = G.Exp.canLaunch(UI.sel.team, 14, { vault: true });
+      panel.appendChild(h('button.primary', {
+        text: '▽ Into the Vault',
+        style: 'width:100%;padding:10px;background:#3a2450;border-color:#6a4a8a',
+        disabled: !!vErr,
+        onclick: function () { var r = G.Vault.launch(UI.sel.team, UI.sel.rows); if (!r.ok) UI.toast(r.msg, 'bad'); UI.refresh(); }
+      }));
+      if (vErr) panel.appendChild(h('p.sub', { text: vErr, style: 'margin-top:4px' }));
+    }
+
     panel.appendChild(h('button', { text: '◂ Back to town', style: 'width:100%;margin-top:8px', onclick: function () { UI.screen = 'town'; UI.refresh(); } }));
   };
 })();

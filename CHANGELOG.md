@@ -1,5 +1,48 @@
 # Changelog — The Gilded Maw
 
+## v7.0 — "The Undervault"
+
+The Trade ending said the Vault opens below the Heart. Now it does — an endless,
+escalating descent with its own Court, its own rules, and no bottom.
+
+### The Undervault — an endless descent
+- Unlocked by the **Trade** ending or **Ascension III+**. Below depth 13 lies an
+  infinite ladder of **strata**; the chase is the **deep-record** (deepest
+  stratum reached), banked and carried across charters.
+- Each stratum rolls procedural **affixes** that reshape the fight and the haul:
+  **Tithe** (blows skim your marks), **Ledger** (each kill compounds the take),
+  **Famine** (no rest or pulse), **Gilt** (double loot, swollen enemies),
+  **Echoing** (a foe charges a Heart-echo each round), **Interest** (enemies mend
+  every round), **Audit** (a Court noble joins every third fight). Affix count
+  grows the deeper you climb.
+- **The Deep Court**: six new nobility — the Auditor, the Usurer, the Assessor,
+  the Chamberlain, the Collector, the Notary — each with its own trick (back-row
+  hunting, wound-drinking, mark-collecting, Grit-levying, brass wards). Two
+  **Court guardians** — the Lord Exchequer and the Magistrate — bar every fourth
+  stratum and drop their regalia.
+
+### Combat formation — front & back rows
+- The party now fights in **two lines**. The **front** takes the blows and
+  **shields the back**; the back is spared until the front falls — but some Deep
+  Court foes **hunt the back row**, and area attacks hit everyone. Place your
+  delvers at outfitting and **Shift** lines mid-fight (it costs the turn).
+
+### Tier IV gear & relic sets
+- **The Deep Forge** — an Undervault upgrade (Forge L3 + gilt-marrow) unlocks
+  **tier IV** patterns: the Exchequer’s Edge, Gilt-Marrow Plate, Null Seal, Deep
+  Ledger, forged from Undervault materials.
+- **Relic sets** with 2-piece / 4-piece bonuses: complete the **Regalia of the
+  Deep Court** or the **Underdelver’s Kit** for escalating company-wide rewards.
+
+### Polish
+- New procedural art: the purple **Undervault** biome, the masked **Deep Court**
+  nobles and the scale-crowned **Court guardians**, and a **front/back** combat
+  layout. Affix banners on the run and in every fight; an **Undervault audio
+  layer** — a ledger-tick under a deeper drone.
+- Save migration v6 → v7. New v7 test coverage: the endless descent (30-run
+  policy sim), affix mechanics, the front/back rows, the guardian cadence, relic
+  sets, and the Deep Forge — all green in the headless sim.
+
 ## v6.0 — "The Warden's Charter"
 
 After the Heart is answered, the company keeps house — and the house gets
