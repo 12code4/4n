@@ -24,11 +24,15 @@
     ]));
 
     panel.appendChild(h('h3', { text: 'Answer it.' }));
-    ['seal', 'trade', 'become'].forEach(function (eid) {
+    var choices = ['seal', 'trade', 'become'];
+    // v8: the true ending, once all three answers have been given (across charters)
+    if (G.Exp.trueEndingReady && G.Exp.trueEndingReady()) choices.push('reckoning');
+    choices.forEach(function (eid) {
       var end = G.DATA.endings[eid];
       panel.appendChild(h('button.choice', {
+        style: eid === 'reckoning' ? 'border-color:hsl(130,60%,45%)' : '',
         onclick: function () { UI.doEnding(eid); },
-        html: '<b style="color:hsl(' + end.color + ',70%,68%)">' + end.name + '</b><span class="sub">' + UI.esc(end.button) + '</span>'
+        html: '<b style="color:hsl(' + end.color + ',70%,68%)">' + (eid === 'reckoning' ? '✦ ' : '') + end.name + '</b><span class="sub">' + UI.esc(end.button) + '</span>'
       }));
     });
     panel.appendChild(h('p.sub', { text: 'There is no going back up from here undecided. Choose.', style: 'margin-top:8px' }));
@@ -49,16 +53,19 @@
         m.appendChild(h(i === end.epilogue.length - 1 ? 'p.quote' : 'p', { text: p }));
       });
       var btns = h('div.btnrow', {});
-      if (eid === 'become') {
-        btns.appendChild(h('button.primary', { text: 'Begin a new charter (New Charter+)', onclick: function () {
+      if (eid === 'become' || eid === 'reckoning') {
+        btns.appendChild(h('button.primary', { text: eid === 'reckoning' ? 'Begin again (New Charter++)' : 'Begin a new charter (New Charter+)', onclick: function () {
           G.Prestige.retire(); UI.closeModal(); UI.townTab = 'company'; UI.screen = 'town'; UI.refresh();
         } }));
         btns.appendChild(h('button', { text: 'Linger a while', onclick: function () { UI.closeModal(); UI.refresh(); } }));
       } else {
         btns.appendChild(h('button.primary', { text: 'Back to the surface', onclick: function () { UI.closeModal(); UI.refresh(); } }));
       }
+      if (eid === 'reckoning') btns.appendChild(h('button', { text: '✦ Credits', onclick: UI.showCredits }));
       m.appendChild(btns);
-      m.appendChild(h('p.sub', { text: 'Reached endings: ' + (st.endings || []).length + '/3. The Codex remembers each.', style: 'margin-top:10px' }));
+      var uniq = {}; (st.endings || []).forEach(function (e) { uniq[e] = 1; });
+      var baseCount = ['seal', 'trade', 'become'].filter(function (e) { return uniq[e]; }).length;
+      m.appendChild(h('p.sub', { text: 'Endings reached this charter: ' + baseCount + '/3' + (eid === 'reckoning' ? ' + the Reckoning' : '') + '. The Codex remembers each.', style: 'margin-top:10px' }));
     }, { dismiss: false });
   };
 

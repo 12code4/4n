@@ -24,7 +24,10 @@
     F.cx.setTransform(dpr, 0, 0, dpr, 0, 0);
   };
 
+  F.reduceMotion = false; // v8: set by Options — stills shake & particles
+
   F.shake = function (mag, dur) {
+    if (F.reduceMotion) return;
     F.shakeMag = Math.max(F.shakeMag, mag);
     F.shakeT = Math.max(F.shakeT, dur);
   };
@@ -63,6 +66,7 @@
   /* ---------- particles ---------- */
   F.spawn = function (p) {
     // {x,y,vx,vy,life,size,color,grav,fade,glow}
+    if (F.reduceMotion) return; // stilled for reduced-motion
     p.age = 0;
     F.parts.push(p);
     if (F.parts.length > 400) F.parts.splice(0, F.parts.length - 400);

@@ -110,19 +110,64 @@
     st.armory.forEach(function (x) { if (x.by === d.id) out.push(G.DATA.gear[x.gid]); });
     return out;
   };
+  /* the actual armory items a delver wears (carries the enchant field) */
+  F.wornItems = function (d) {
+    var st = G.state, out = [];
+    if (!st.armory) return out;
+    st.armory.forEach(function (x) { if (x.by === d.id) out.push(x); });
+    return out;
+  };
+  function enchDef(it) { return it && it.ench ? (G.DATA.enchants[it.ench] || null) : null; }
   F.atk = function (d) {
     var a = 0;
-    F.gearOf(d).forEach(function (g) { a += g.atk || 0; });
+    F.wornItems(d).forEach(function (it) { var g = G.DATA.gear[it.gid]; a += g.atk || 0; var e = enchDef(it); if (e && e.fx.atk) a += e.fx.atk; });
     return a;
   };
   F.def = function (d) {
     var v = 0;
-    F.gearOf(d).forEach(function (g) { v += g.def || 0; });
+    F.wornItems(d).forEach(function (it) { var g = G.DATA.gear[it.gid]; v += g.def || 0; var e = enchDef(it); if (e && e.fx.def) v += e.fx.def; });
     return v;
   };
   F.fx = function (d, key) {
     var v = 0;
-    F.gearOf(d).forEach(function (g) { if (g.fx && g.fx[key]) v += g.fx[key]; });
+    F.wornItems(d).forEach(function (it) { var g = G.DATA.gear[it.gid]; if (g.fx && g.fx[key]) v += g.fx[key]; var e = enchDef(it); if (e && e.fx[key] && key !== 'atk' && key !== 'def') v += e.fx[key]; });
     return v;
+  };
+  /* sum an enchant-only special (lifesteal, wardHit) across worn gear */
+  F.enchFx = function (d, key) {
+    var v = 0;
+    F.wornItems(d).forEach(function (it) { var e = enchDef(it); if (e && e.fx[key]) v += e.fx[key]; });
+    return v;
+  };
+
+  /* ---------- enchanting (v8) ---------- */
+  F.enchantOptions = function (it) {
+    var def = G.DATA.gear[it.gid];
+    return G.DATA.enchantList().filter(function (e) { return e.slot === 'any' || e.slot === def.slot; });
+  };
+  F.canEnchant = function (uid, affixId) {
+    var st = G.state;
+    var it = null; st.armory.forEach(function (x) { if (x.uid === uid) it = x; });
+    if (!it) return 'No such piece.';
+    if (it.by) { var ex = st.expedition; if (ex && ex.team.indexOf(it.by) >= 0) return 'That piece is below — enchant at home.'; }
+    var e = G.DATA.enchants[affixId];
+    if (!e) return 'Unknown enchantment.';
+    if (F.enchantOptions(it).indexOf(e) < 0) return 'That enchantment won’t take on this slot.';
+    var c = G.DATA.ENCHANT_COST;
+    if (st.marks < c.marks) return 'Not enough marks.';
+    if ((st.inventory[c.mat] || 0) < c.qty) return 'Missing ' + G.DATA.materials[c.mat].name + '.';
+    return null;
+  };
+  F.enchant = function (uid, affixId) {
+    var err = F.canEnchant(uid, affixId);
+    if (err) return { ok: false, msg: err };
+    var st = G.state, c = G.DATA.ENCHANT_COST;
+    var it = null; st.armory.forEach(function (x) { if (x.uid === uid) it = x; });
+    st.marks -= c.marks; st.stats.spent += c.marks;
+    st.inventory[c.mat] -= c.qty; if (st.inventory[c.mat] <= 0) delete st.inventory[c.mat];
+    it.ench = affixId;
+    G.log(G.DATA.gear[it.gid].name + ' is reforged — ' + G.DATA.enchants[affixId].name + '. ' + G.DATA.enchants[affixId].desc, 'good');
+    G.emit('armory');
+    return { ok: true };
   };
 })();

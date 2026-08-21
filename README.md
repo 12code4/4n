@@ -28,24 +28,27 @@ Saves live in your browser (localStorage) with export/import strings as backup.
 
 ## The game
 
-- **Tycoon surface:** hire delvers, raise nine buildings, forge gear, ride a
-  moody market, sign contracts, race rival charters, earn renown, keep a
-  menagerie — or fall behind, and watch your roster walk.
+- **Tycoon surface:** hire delvers, raise eleven buildings, forge and **enchant**
+  gear, ride a moody, **seasonal** market, sign contracts, race rival charters,
+  earn renown, keep a menagerie — or fall behind, and watch your roster walk.
 - **Roguelite depths:** branching node-map expeditions through five biomes
-  (depths 1–13), turn-based combat with a shared Grit economy, status effects,
-  telegraphed intents, push-your-luck torchlight, permadeath, and a guardian
-  gating every biome.
-- **One entity:** the Maw has **moods** that drive the market and the dungeon
-  at once. Choose **omens** before a run; bank **Legacy Marks** by retiring a
-  charter; take a **companion beast** below.
+  (depths 1–13), turn-based combat with a shared Grit economy, **front/back
+  rows**, status effects, telegraphed intents, push-your-luck torchlight,
+  permadeath, and a guardian gating every biome.
+- **One entity:** the Maw has **moods** that drive the market and the dungeon at
+  once. Choose **omens** before a run; bank **Legacy Marks** and climb the
+  **Ascension** ladder by retiring a charter; ride with a **Warden** and a pack
+  of **companion beasts**; earn permanent **class mastery** across charters.
 - **The last trade:** thirteen floors down waits the Heart of the Maw, and a
-  choice — **Seal it. Trade with it. Or become it.** Three endings; a seeded
-  **Daily Descent**; a full **Codex**; a synthesized soundscape.
+  choice — **Seal it. Trade with it. Or become it** — then the endless
+  **Undervault** below it, the **Deep Court**, named **legends**, and, once all
+  three answers are given, a fourth: **The Reckoning.** A seeded **Daily
+  Descent**; a full **Codex**; difficulty & accessibility **options**; a
+  synthesized soundscape.
 
-Five major versions, from the founding charter to the Heart — see
+Eight major versions, from the founding charter to the true ending — see
 [CHANGELOG.md](CHANGELOG.md). The full design is in [docs/DESIGN.md](docs/DESIGN.md),
-the plan in [docs/ROADMAP.md](docs/ROADMAP.md), and per-patch notes in
-[docs/patches/](docs/patches/).
+the plan in [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/ROADMAP-6-8.md](docs/ROADMAP-6-8.md).
 
 ## Development
 

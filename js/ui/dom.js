@@ -207,6 +207,8 @@
       m.appendChild(h('h2', { text: 'Menu' }));
       m.appendChild(h('p.sub', { text: 'The Gilded Maw v' + G.VERSION + ' — a delving-company tycoon roguelite. Saves automatically at dusk and on return.' }));
       m.appendChild(h('div.btnrow', { style: 'justify-content:flex-start;flex-wrap:wrap' }, [
+        h('button.primary', { text: '⚙ Options', onclick: UI.showOptions }),
+        h('button', { text: '✦ Credits', onclick: UI.showCredits }),
         h('button', { text: 'Save now', onclick: function () { G.save(); UI.toast('Saved.', 'good'); } }),
         h('button', { text: 'Export save', onclick: function () {
           UI.modal(function (mm) {
@@ -252,6 +254,68 @@
         } })
       ]));
       m.appendChild(h('div.btnrow', {}, [h('button', { text: 'Close', onclick: UI.closeModal })]));
+    });
+  };
+
+  /* v8: Options & accessibility */
+  UI.showOptions = function () {
+    if (!G.Options) return;
+    UI.modal(function (m) {
+      m.appendChild(h('h2', { text: 'Options' }));
+      // difficulty
+      m.appendChild(h('h3', { text: 'Difficulty', style: 'margin-top:6px' }));
+      m.appendChild(h('p.sub', { text: 'A separate dial from Ascension — it scales foes up or down for the whole game.' }));
+      var drow = h('div.row', { style: 'gap:6px;justify-content:flex-start;flex-wrap:wrap' });
+      ['story', 'standard', 'brutal'].forEach(function (id) {
+        var d = G.Options.DIFFS[id];
+        drow.appendChild(h('button.small' + (G.Options.get('difficulty') === id ? '.primary' : ''), { text: d.name, title: d.blurb, onclick: function () { G.Options.set('difficulty', id); UI.showOptions(); } }));
+      });
+      m.appendChild(drow);
+      m.appendChild(h('p.sub', { text: G.Options.DIFFS[G.Options.get('difficulty')].blurb, style: 'margin-top:2px' }));
+      // toggles
+      m.appendChild(h('h3', { text: 'Accessibility', style: 'margin-top:10px' }));
+      function toggle(key, label, blurb) {
+        var on = !!G.Options.get(key);
+        m.appendChild(h('div.row', { style: 'align-items:center;margin:3px 0' }, [
+          h('span', { html: '<b>' + label + '</b> <span class="sub">' + blurb + '</span>', style: 'flex:1' }),
+          h('button.small' + (on ? '.primary' : ''), { text: on ? 'On' : 'Off', onclick: function () { G.Options.set(key, !on); UI.showOptions(); } })
+        ]));
+      }
+      toggle('colorblind', 'Colorblind palette', 'shifts combat reds/greens to blue/amber');
+      toggle('reducedMotion', 'Reduced motion', 'stills particles, shake, and flourishes');
+      toggle('autoResolve', 'Auto-resolve trivial fights', 'a one-click resolve when a fight is safely won');
+      // speed
+      m.appendChild(h('h3', { text: 'Combat speed', style: 'margin-top:10px' }));
+      var srow = h('div.row', { style: 'gap:6px;justify-content:flex-start' });
+      [[1, '1× — measured'], [2, '2× — brisk'], [3, 'Instant log']].forEach(function (sp) {
+        srow.appendChild(h('button.small' + (G.Options.get('speed') === sp[0] ? '.primary' : ''), { text: sp[1], onclick: function () { G.Options.set('speed', sp[0]); UI.showOptions(); } }));
+      });
+      m.appendChild(srow);
+      m.appendChild(h('div.btnrow', { style: 'margin-top:12px' }, [h('button', { text: 'Close', onclick: UI.closeModal })]));
+    });
+  };
+
+  /* v8: Credits — the keepsake page */
+  UI.showCredits = function () {
+    UI.modal(function (m) {
+      m.appendChild(h('h2', { text: 'The Gilded Maw', style: 'text-align:center' }));
+      m.appendChild(h('p.quote', { text: '“The Maw doesn’t take. It trades. Find out what it wants.”', style: 'text-align:center' }));
+      var lines = [
+        'A delving-company tycoon × roguelite, built end to end for the love of it.',
+        'Design, code, story, procedural art & synthesized sound — one continuous line, v1.0 → v8.0.',
+        'Every silhouette drawn on the canvas at runtime; every note made in the browser; no image or audio files.',
+        'The Founding · Forge & Fortune · Rivals & Renown · The Living Maw · The Heart of It · The Warden’s Charter · The Undervault · Legends of the Maw.'
+      ];
+      lines.forEach(function (l) { m.appendChild(h('p.sub', { text: l, style: 'text-align:center;margin:6px 0' })); });
+      if (G.Codex) {
+        var total = 0, found = 0;
+        ['enemy', 'material', 'relic', 'mood', 'biome', 'ending', 'beast'].forEach(function (c) { total += G.Codex.total(c); found += G.Codex.count(c); });
+        m.appendChild(h('p.sub', { html: 'Codex: <b>' + found + '/' + total + '</b> recorded' + (found >= total ? ' — <b>complete</b>. A keepsake.' : '.'), style: 'text-align:center;margin-top:10px;color:var(--brass-hi)' }));
+      }
+      if (G.state && (G.state.trueEnding || (G.state.legacy && G.state._legEndings && G.Exp.trueEndingReady()))) {
+        m.appendChild(h('p.sub', { text: '✦ The Reckoning has been reached. The books are square.', style: 'text-align:center;color:var(--good)' }));
+      }
+      m.appendChild(h('div.btnrow', { style: 'margin-top:12px' }, [h('button.primary', { text: 'Close', onclick: UI.closeModal })]));
     });
   };
 

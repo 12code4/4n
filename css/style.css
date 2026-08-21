@@ -170,3 +170,24 @@ table.mkt td.r, table.mkt th.r { text-align: right; }
   #panel { width: calc(100vw - 24px); top: auto; height: 62vh; }
   #toasts { bottom: calc(62vh + 20px); }
 }
+
+/* v8.0 — accessibility */
+/* colorblind palette: shift semantic green→blue, keep reds as warm amber so hue
+   isn't the only cue */
+body.cb {
+  --good: #7fb8ff;
+  --bad: #ffb84a;
+}
+body.cb .bar i { background: #5aa0e0; }
+body.cb .bar.hp i { background: linear-gradient(90deg, #3f6fb0, #7ab0f0); }
+body.cb .pip.bleed { color: #ffb84a; }
+body.cb .enemyrow .bar i,
+body.cb .bar i[style*="e06a5a"] { filter: hue-rotate(30deg) saturate(1.2); }
+
+/* reduced motion: still transitions and toast animation */
+body.reduced-motion *,
+body.reduced-motion *::before,
+body.reduced-motion *::after {
+  animation-duration: 0.001s !important;
+  transition-duration: 0.001s !important;
+}

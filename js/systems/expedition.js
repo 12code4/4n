@@ -674,6 +674,16 @@
     G.emit('expedition');
   };
 
+  /* v8: the true ending is available once all three base endings have been reached
+   * (this charter or across charters) — a fourth answer to Maren's question. */
+  X.trueEndingReady = function () {
+    var st = G.state;
+    var seen = {};
+    (st.endings || []).forEach(function (e) { seen[e] = true; });
+    (st._legEndings || []).forEach(function (e) { seen[e] = true; });
+    return seen.seal && seen.trade && seen.become;
+  };
+
   /* ---------- the Heart's three endings (v5.0) ---------- */
   X.chooseEnding = function (endingId) {
     var st = G.state, ex = st.expedition;
@@ -691,6 +701,13 @@
     if (st.endings.indexOf(endingId) < 0) st.endings.push(endingId);
     st.heartOutcome = endingId;
     if (G.Codex) G.Codex.discover('ending', endingId);
+    // v8: remember Heart endings across charters (gates the true ending)
+    if (endingId !== 'reckoning' && G.Prestige) {
+      var legE = G.Prestige.loadLegacy();
+      legE.endings = legE.endings || [];
+      if (legE.endings.indexOf(endingId) < 0) { legE.endings.push(endingId); G.Prestige.saveLegacy(legE); }
+      if (st._legEndings && st._legEndings.indexOf(endingId) < 0) st._legEndings.push(endingId);
+    }
 
     // ending-specific, lasting effects
     if (endingId === 'seal') {
@@ -709,6 +726,16 @@
         st.legacy.marks = (st.legacy.marks || 0) + 6;
       }
       if (G.Renown) G.Renown.award(null, 80);
+    } else if (endingId === 'reckoning') {
+      // the true ending: the books are squared. A grand windfall and a New-Game++ seal.
+      st.trueEnding = true;
+      if (G.Prestige) {
+        var legR = G.Prestige.loadLegacy();
+        legR.marks = (legR.marks || 0) + 12; legR.trueEnding = true;
+        G.Prestige.saveLegacy(legR);
+        st.legacy.marks = (st.legacy.marks || 0) + 12;
+      }
+      if (G.Renown) G.Renown.award(null, 200);
     }
     if (G.Achieve) G.Achieve.grant('heart_' + endingId);
     if (G.Ascension) G.Ascension.onEnding(); // bank the Ascension clear, unlock the next tier

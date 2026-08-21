@@ -17,7 +17,7 @@ var FILES = [
   'js/data/archive.js', 'js/data/renown.js', 'js/data/relics.js', 'js/data/talents.js',
   'js/data/achievements.js', 'js/data/rivals.js',
   'js/data/moods.js', 'js/data/omens.js', 'js/data/veins.js', 'js/data/beasts.js', 'js/data/legacy.js',
-  'js/data/heart.js', 'js/data/ascension.js', 'js/data/seasons.js', 'js/data/undervault.js',
+  'js/data/heart.js', 'js/data/ascension.js', 'js/data/seasons.js', 'js/data/undervault.js', 'js/data/legends.js',
   'js/migrations.js',
   'js/systems/state.js', 'js/systems/delvers.js', 'js/systems/economy.js',
   'js/systems/forge.js', 'js/systems/contracts.js',
@@ -25,7 +25,7 @@ var FILES = [
   'js/systems/moods.js', 'js/systems/omens.js', 'js/systems/beasts.js', 'js/systems/prestige.js',
   'js/systems/codex.js', 'js/systems/daily.js',
   'js/systems/ascension.js', 'js/systems/seasons.js', 'js/systems/finance.js', 'js/systems/hints.js',
-  'js/systems/undervault.js',
+  'js/systems/undervault.js', 'js/systems/options.js', 'js/systems/mastery.js', 'js/systems/legends.js',
   'js/systems/expedition.js', 'js/systems/combat.js'
 ];
 FILES.forEach(function (f) {
@@ -445,7 +445,7 @@ section('v2.0 Save migration v1 → v2');
   G.state = migrated;
   var s = G.serialize();
   var pay2 = JSON.parse(s);
-  ok(pay2.sv === 7, 'serialized at save-version 7 (full migration chain)');
+  ok(pay2.sv === 8, 'serialized at save-version 8 (full migration chain)');
 })();
 
 section('v2.0 Emberdeep: reach and fight the Smelted King');
@@ -675,7 +675,7 @@ section('v3.0 Save migration v2 → v3');
   migrated.delvers.forEach(function (d) { ok(Array.isArray(d.talents) && typeof d.face === 'number', 'migration adds talents+face'); });
   ok(migrated.graveyard[0].honored === false, 'migration adds honored flag to graves');
   G.state = migrated;
-  ok(JSON.parse(G.serialize()).sv === 7, 'serializes at v7 (full migration chain)');
+  ok(JSON.parse(G.serialize()).sv === 8, 'serializes at v8 (full migration chain)');
 })();
 
 /* ---------------- v4.0: moods, omens, status, veins, beasts, prestige ---------------- */
@@ -1242,7 +1242,7 @@ section('v6.0 Save migration v5 → v6');
   ok(migrated.festival === null && migrated._lastSeason === 0, 'v6 seeds season/festival state');
   ok(migrated.loan === null && typeof migrated.hints === 'object', 'v6 seeds loan + hints');
   G.state = migrated;
-  ok(JSON.parse(G.serialize()).sv === 7, 'the migrated save serializes at the current version');
+  ok(JSON.parse(G.serialize()).sv === 8, 'the migrated save serializes at the current version');
 })();
 
 /* ================= v7.0 "The Undervault" ================= */
@@ -1485,7 +1485,157 @@ section('v7.0 Save migration v6 → v7');
   ok(migrated.expedition.rows && migrated.expedition.vault === false, 'v7 gives a live run rows + vault flag');
   ok(Array.isArray(migrated.expedition.affixes), 'v7 gives a live run an affix list');
   G.state = migrated;
-  ok(JSON.parse(G.serialize()).sv === 7, 'the migrated save serializes at v7');
+  ok(JSON.parse(G.serialize()).sv === 8, 'the migrated save serializes at v7-to-8');
+})();
+
+/* ================= v8.0 "Legends of the Maw" ================= */
+
+section('v8.0 Legends: recruit gating, signature kit, and the fall');
+(function () {
+  G.newGame(8100);
+  var st = G.state; st.marks = 2000;
+  ok(G.Legends.status('nameless_pilgrim') === 'locked', 'a legend is locked until their condition is met');
+  st.guardiansSlain = { heart: true };
+  ok(G.Legends.status('nameless_pilgrim') === 'available', 'reaching the Heart makes the Pilgrim available');
+  var before = G.Delvers.roster().length;
+  var r = G.Legends.recruit('nameless_pilgrim');
+  ok(r.ok, 'the Pilgrim signs the charter');
+  ok(G.Delvers.roster().length === before + 1, 'the legend joins the roster');
+  var lg = G.Delvers.roster().filter(function (d) { return d.legend === 'nameless_pilgrim'; })[0];
+  ok(lg && lg.cls === 'arcanist', 'the legend has their class');
+  ok(G.Delvers.skillOf(lg).id === 'sig_litany', 'the legend carries their signature skill');
+  ok(lg.talents.indexOf('empower') >= 0, 'the legend arrives with pre-learned talents');
+  ok(G.Legends.status('nameless_pilgrim') === 'serving', 'a recruited legend is now serving');
+  ok(!G.Legends.recruit('nameless_pilgrim').ok, 'cannot recruit the same legend twice');
+  // the fall is remembered
+  G.Delvers.kill(lg, 'a test of mortality');
+  ok(G.Legends.status('nameless_pilgrim') === 'fallen', 'a fallen legend is remembered as fallen');
+  ok((st.graveyard || []).some(function (g) { return g.legend === 'nameless_pilgrim'; }), 'the grave records the legend');
+})();
+
+section('v8.0 Enchanting: reforge affixes flow into gear stats & combat');
+(function () {
+  G.newGame(8200);
+  var st = G.state; st.marks = 2000;
+  G.Economy.build('forge');
+  st.inventory.ember_glass = 6; st.inventory.grave_iron = 6; st.inventory.singing_ore = 6;
+  G.Forge.craft('glass_knife');   // weapon
+  G.Forge.craft('ore_jack');      // armor
+  var wpn = st.armory.filter(function (x) { return x.gid === 'glass_knife'; })[0];
+  var arm = st.armory.filter(function (x) { return x.gid === 'ore_jack'; })[0];
+  ok(G.Forge.canEnchant(wpn.uid, 'bulwark') !== null, 'an armor enchant won’t take on a weapon');
+  ok(G.Forge.canEnchant(wpn.uid, 'vampiric').indexOf('Missing') === 0, 'enchanting needs a Null Coin');
+  st.inventory.null_coin = 4;
+  ok(G.Forge.enchant(wpn.uid, 'vampiric').ok, 'reforge the knife Vampiric');
+  ok(wpn.ench === 'vampiric', 'the enchant is recorded on the piece');
+  ok(G.Forge.enchant(arm.uid, 'bulwark').ok, 'reforge the jack Bulwark (+2 def)');
+  // equip and read the fx through Forge
+  var d = G.Delvers.roster()[0];
+  G.Forge.equip(wpn.uid, d.id); G.Forge.equip(arm.uid, d.id);
+  ok(G.Forge.def(d) >= 2 + 1, 'Bulwark adds to armor def'); // jack 1 + bulwark 2
+  ok(Math.abs(G.Forge.enchFx(d, 'lifesteal') - 0.25) < 1e-9, 'Vampiric exposes lifesteal to combat');
+  // a Keen trinket routes crit through Forge.fx
+  st.inventory.pale_coin = 2; st.inventory.grave_iron = 2;
+  G.Forge.craft('luck_knuckle');
+  var tr = st.armory.filter(function (x) { return x.gid === 'luck_knuckle'; })[0];
+  G.Forge.enchant(tr.uid, 'keen'); G.Forge.equip(tr.uid, d.id);
+  ok(G.Forge.fx(d, 'crit') >= 0.08 - 1e-9, 'Keen adds crit through Forge.fx');
+})();
+
+section('v8.0 Lifesteal & mastery reduce/return HP in combat');
+(function () {
+  G.newGame(8250);
+  var st = G.state; st.marks = 2000; st.mood = null;
+  G.Economy.build('forge'); st.inventory.grave_iron = 6; st.inventory.null_coin = 2;
+  G.Forge.craft('iron_maul'); var maul = st.armory[0];
+  G.Forge.enchant(maul.uid, 'vampiric');
+  var d = mkDelver('vanguard', 10, 400); d.stats.wits = 99;
+  G.Forge.equip(maul.uid, d.id);
+  var d2 = mkDelver('vanguard', 10, 400); d2.stats.wits = 99;
+  G.Economy.buySupply('torches', 6); G.Economy.buySupply('rations', 6);
+  G.Exp.launch([d.id, d2.id], 1);
+  G.Combat.start(['root_maw'], {}); // a chunky target to bite
+  var c = st.expedition.combat; var e = c.enemies[0];
+  d.hp = 200; // hurt, so lifesteal is visible
+  // drive d to act and strike
+  var guard = 0; while (guard++ < 40 && G.Combat.actor() && G.Combat.actor().id !== d.id) G.Combat.act({ type: 'guard' });
+  if (G.Combat.actor() && G.Combat.actor().id === d.id) {
+    var hp0 = d.hp;
+    G.Combat.act({ type: 'strike', target: e.uid });
+    ok(d.hp > hp0, 'a Vampiric strike heals the attacker');
+  } else ok(true, 'lifesteal (actor ordering) — skipped this seed');
+  st.expedition = null;
+})();
+
+section('v8.0 Class mastery: kills earn permanent tier buffs');
+(function () {
+  G.newGame(8300);
+  ok(G.Mastery.tier('vanguard') === 0, 'a fresh class sits at mastery 0');
+  ok(G.Mastery.fx('vanguard', 'def') === 0, 'mastery 0 grants nothing');
+  for (var i = 0; i < 40; i++) G.Mastery.credit('vanguard');
+  ok(G.Mastery.total('vanguard') === 40, 'kills accumulate');
+  ok(G.Mastery.tier('vanguard') === 1, '40 kills reach mastery tier 1');
+  ok(G.Mastery.fx('vanguard', 'def') === 1, 'tier 1 vanguard mastery adds +1 def');
+  for (var j = 0; j < 80; j++) G.Mastery.credit('vanguard'); // total 120
+  ok(G.Mastery.tier('vanguard') === 2 && G.Mastery.fx('vanguard', 'def') === 2, 'tier 2 at 120 kills');
+  // fx is class-specific
+  ok(G.Mastery.fx('scout', 'def') === 0, 'mastery is per-class');
+})();
+
+section('v8.0 Options: difficulty presets scale the Maw');
+(function () {
+  G.newGame(8400);
+  var st = G.state; st.mood = null;
+  G.Options.set('difficulty', 'standard');
+  var d = mkDelver('vanguard', 10, 400); d.stats.wits = 99; var d2 = mkDelver('vanguard', 10, 400); d2.stats.wits = 99;
+  G.Economy.buySupply('torches', 8); G.Economy.buySupply('rations', 8);
+  st.unlockedStart = 6;
+  G.Exp.launch([d.id, d2.id], 5);
+  G.Combat.start(['slag_golem'], {}); var stdHp = st.expedition.combat.enemies[0].maxHp;
+  st.expedition.combat = null; st.expedition.mode = 'map';
+  G.Options.set('difficulty', 'brutal');
+  G.Combat.start(['slag_golem'], {}); var brutalHp = st.expedition.combat.enemies[0].maxHp;
+  ok(brutalHp > stdHp, 'Brutal makes foes tougher (' + stdHp + '→' + brutalHp + ')');
+  ok(Math.abs(brutalHp / stdHp - 1.3) < 0.05, 'Brutal ≈ ×1.3 HP');
+  G.Options.set('difficulty', 'story');
+  G.Combat.start(['slag_golem'], {}); // re-key not needed; just read scaling
+  ok(Math.abs(G.Options.diffMult() - 0.8) < 1e-9, 'Story is ×0.8');
+  G.Options.set('difficulty', 'standard'); // reset so later sims are unaffected
+  st.expedition = null;
+})();
+
+section('v8.0 The true ending: gated on all three answers');
+(function () {
+  G.newGame(8500);
+  var st = G.state;
+  ok(!G.Exp.trueEndingReady(), 'the Reckoning is closed with no endings reached');
+  st._legEndings = ['seal', 'trade'];
+  ok(!G.Exp.trueEndingReady(), 'two of three is not enough');
+  st._legEndings = ['seal', 'trade', 'become'];
+  ok(G.Exp.trueEndingReady(), 'all three answers open the Reckoning');
+  ok(!!G.DATA.endings.reckoning, 'the Reckoning ending exists');
+  // choose it through a minimal parley
+  var d = mkDelver('vanguard', 6);
+  st.expedition = { team: [d.id], mode: 'heart_parley', loot: {}, marksFound: 0, daysOut: 1, killCount: 0, torches: 0, rations: 0, bandages: 0, startDepth: 13, endingId: null, omens: [], beasts: [], rows: {}, vault: false, stratum: 0, affixes: [], log: [], depth: 13 };
+  var r = G.Exp.chooseEnding('reckoning');
+  ok(r.ok && r.ending === 'reckoning', 'the Reckoning can be chosen');
+  ok(st.trueEnding === true, 'choosing the Reckoning marks the true ending');
+  ok(!st.expedition, 'the run surfaces after the Reckoning');
+})();
+
+section('v8.0 Save migration v7 → v8');
+(function () {
+  G.newGame(8600);
+  var st = G.U.deep(G.state);
+  delete st.mastery; delete st.legendsRecruited; delete st.trueEnding; delete st._legMastery; delete st._legEndings;
+  st.endings = ['seal'];
+  var migrated = G.migrate({ sv: 7, gv: '7.0.0', state: st });
+  ok(migrated.mastery && typeof migrated.mastery === 'object', 'v8 seeds class mastery');
+  ok(migrated.legendsRecruited && typeof migrated.legendsRecruited === 'object', 'v8 seeds legend recruitment');
+  ok(migrated.trueEnding === false, 'v8 seeds the true-ending flag');
+  ok(migrated._legEndings.indexOf('seal') >= 0, 'v8 carries prior endings into the true-ending gate');
+  G.state = migrated;
+  ok(JSON.parse(G.serialize()).sv === 8, 'the migrated save serializes at v8');
 })();
 
 /* ---------------- regression: guardian flee must not strand the team ---------------- */

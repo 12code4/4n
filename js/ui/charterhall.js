@@ -15,7 +15,7 @@
       return;
     }
     // sub-nav
-    var subs = [['standings', 'Standings'], ['relics', 'Relics'], ['quests', 'Townsfolk'], ['memorial', 'Memorial'], ['achieve', 'Deeds']];
+    var subs = [['standings', 'Standings'], ['relics', 'Relics'], ['legends', 'Legends'], ['quests', 'Townsfolk'], ['memorial', 'Memorial'], ['records', 'Records'], ['achieve', 'Deeds']];
     if (G.bld('menagerie')) subs.push(['beasts', 'Menagerie']);
     subs.push(['renewal', 'Renewal']);
     var nav = h('div.tabs');
@@ -25,18 +25,78 @@
     panel.appendChild(nav);
 
     // guard against a vanished section
-    var validSec = { standings: 1, relics: 1, quests: 1, memorial: 1, achieve: 1, renewal: 1 };
+    var validSec = { standings: 1, relics: 1, legends: 1, quests: 1, memorial: 1, records: 1, achieve: 1, renewal: 1 };
     if (G.bld('menagerie')) validSec.beasts = 1;
     if (!validSec[UI.hallSection]) UI.hallSection = 'standings';
 
     if (UI.hallSection === 'standings') renderStandings(panel);
     else if (UI.hallSection === 'relics') renderRelics(panel);
+    else if (UI.hallSection === 'legends') renderLegends(panel);
     else if (UI.hallSection === 'quests') renderQuests(panel);
     else if (UI.hallSection === 'memorial') renderMemorial(panel);
+    else if (UI.hallSection === 'records') renderRecords(panel);
     else if (UI.hallSection === 'beasts') renderBeasts(panel);
     else if (UI.hallSection === 'renewal') renderRenewal(panel);
     else renderAchieve(panel);
   };
+
+  /* v8: the Hall of Legends — unique heroes, their stories, and who has fallen */
+  function renderLegends(panel) {
+    panel.appendChild(h('p.sub', { text: 'The valley remembers a handful by name. Meet their conditions and they will sign your charter — and if they fall, this hall keeps the tale.' }));
+    G.Legends.list().forEach(function (def) {
+      var status = G.Legends.status(def.id);
+      var tint = { serving: 'var(--good)', fallen: 'var(--bad)', available: 'var(--brass-hi)', locked: 'var(--ink-dim)' }[status];
+      var card = h('div.card' + (status === 'serving' ? '.selected' : ''), status === 'locked' ? { style: 'opacity:0.72' } : {});
+      card.appendChild(h('div.row', {}, [
+        h('span.name', { html: def.name + ' <span class="sub">— ' + UI.esc(def.title) + '</span>' }),
+        h('span.sub', { text: status, style: 'color:' + tint })
+      ]));
+      def.story.forEach(function (para) { card.appendChild(h('p.sub', { text: para, style: 'margin:4px 0' })); });
+      if (status === 'available') {
+        var err = G.Legends.canRecruit(def.id);
+        card.appendChild(h('button.small.primary', { text: 'Sign — ' + def.cost + 'ᵯ', disabled: !!err, title: err || '', onclick: function () { var r = G.Legends.recruit(def.id); if (!r.ok) UI.toast(r.msg, 'bad'); UI.refresh(); } }));
+        if (err) card.appendChild(h('span.sub', { text: '  ' + err, style: 'margin-left:6px' }));
+      } else if (status === 'locked') {
+        card.appendChild(h('p.sub', { html: '<b>To find them:</b> ' + UI.esc(def.reqText) + ' — then sign for ' + def.cost + 'ᵯ.', style: 'margin-top:2px' }));
+      } else if (status === 'serving') {
+        card.appendChild(h('span.pill', { text: 'serving your company' }));
+      } else if (status === 'fallen') {
+        var g = (G.state.graveyard || []).filter(function (x) { return x.legend === def.id; })[0];
+        card.appendChild(h('p.sub', { html: '<b>Fallen</b> — ' + (g ? UI.esc(g.cause) + ', day ' + g.day : 'lost to the Maw') + '.', style: 'margin-top:2px;color:var(--bad)' }));
+      }
+      panel.appendChild(card);
+    });
+  }
+
+  /* v8: the Records hall — lifetime numbers, class mastery, and best marks */
+  function renderRecords(panel) {
+    var st = G.state, s = st.stats;
+    panel.appendChild(h('p.sub', { text: 'The company’s whole account, footed and honest.' }));
+    var rows = [
+      ['Days run', s.daysRun || st.day], ['Expeditions', s.delves || 0], ['Deepest depth', s.deepest || 0],
+      ['Deepest Undervault stratum', st.deepRecord || 0], ['Kills', s.kills || 0], ['Delvers lost', s.deaths || 0],
+      ['Marks earned', G.U.fmt(s.earned || 0) + 'ᵯ'], ['Marks spent', G.U.fmt(s.spent || 0) + 'ᵯ'],
+      ['Contracts filled', s.contractsDone || 0], ['Rival brawls won', s.rivalWins || 0], ['Guardians felled', Object.keys(st.guardiansSlain || {}).length]
+    ];
+    var grid = h('div', { style: 'display:grid;grid-template-columns:1fr auto;gap:2px 12px;margin:4px 0 10px' });
+    rows.forEach(function (r) { grid.appendChild(h('span.sub', { text: r[0] })); grid.appendChild(h('span', { text: '' + r[1], style: 'text-align:right;color:var(--brass-hi)' })); });
+    panel.appendChild(grid);
+    // class mastery
+    if (G.Mastery) {
+      panel.appendChild(h('h3', { text: 'Class Mastery' }));
+      panel.appendChild(h('p.sub', { text: 'Kills by each class accumulate across every charter, earning permanent, company-wide craft.', style: 'margin-bottom:4px' }));
+      ['vanguard', 'scout', 'warden', 'alchemist', 'arcanist'].forEach(function (cls) {
+        var tier = G.Mastery.tier(cls), tot = G.Mastery.total(cls), next = G.Mastery.nextAt(cls), lbl = G.Mastery.label(cls);
+        var card = h('div.card');
+        card.appendChild(h('div.row', {}, [
+          h('span.name', { text: G.U.cap(cls) + ' — Mastery ' + tier + '/' + G.Mastery.maxTier() }),
+          h('span.sub', { text: lbl || '—' })
+        ]));
+        card.appendChild(h('p.sub', { text: tot + ' kills' + (next ? ' · next tier at ' + next : ' · mastered'), style: 'margin:2px 0' }));
+        panel.appendChild(card);
+      });
+    }
+  }
 
   function renderBeasts(panel) {
     var st = G.state;

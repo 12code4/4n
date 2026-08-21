@@ -38,10 +38,11 @@
     st.armory.forEach(function (it) {
       var def = G.DATA.gear[it.gid];
       var holder = it.by ? G.Delvers.get(it.by) : null;
+      var ench = it.ench ? G.DATA.enchants[it.ench] : null;
       var card = h('div.card');
       card.appendChild(h('div.row', {}, [
-        h('span.name', { text: slotGlyph[def.slot] + ' ' + def.name }),
-        h('span.sub', { text: gearStatText(def) })
+        h('span.name', { text: slotGlyph[def.slot] + ' ' + (ench ? ench.name + ' ' : '') + def.name }),
+        h('span.sub', { text: gearStatText(def) + (ench ? ' · ' + ench.desc : '') })
       ]));
       card.appendChild(h('p.sub', { text: def.desc, style: 'margin:3px 0' }));
       var row = h('div.row', { style: 'margin-top:4px;flex-wrap:wrap;gap:4px;justify-content:flex-start' });
@@ -58,6 +59,19 @@
         row.appendChild(h('button.small', { text: 'Sell ' + G.DATA.gearValue(def) + 'ᵯ', onclick: function () { G.Forge.sell(it.uid); UI.refresh(); } }));
       }
       card.appendChild(row);
+      // v8: enchanting — reforge a piece with a prefix affix (once)
+      if (!ench && !holder) {
+        var c = G.DATA.ENCHANT_COST;
+        var erow = h('div.row', { style: 'margin-top:4px;flex-wrap:wrap;gap:4px;justify-content:flex-start' });
+        erow.appendChild(h('span.sub', { text: 'Enchant (' + c.marks + 'ᵯ · ' + c.qty + '× ' + G.DATA.materials[c.mat].name + '):' }));
+        G.Forge.enchantOptions(it).forEach(function (e) {
+          var err = G.Forge.canEnchant(it.uid, e.id);
+          erow.appendChild(h('button.small', { text: e.name, title: e.desc + (err ? ' — ' + err : ''), disabled: !!err, onclick: function () { var r = G.Forge.enchant(it.uid, e.id); if (!r.ok) UI.toast(r.msg, 'bad'); UI.refresh(); } }));
+        });
+        card.appendChild(erow);
+      } else if (ench) {
+        card.appendChild(h('span.pill', { text: '✦ ' + ench.name, style: 'margin-top:4px' }));
+      }
       panel.appendChild(card);
     });
 

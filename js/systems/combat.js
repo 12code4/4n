@@ -24,6 +24,10 @@
   function healScale() { return omenMult('healBonus') * (G.Beasts ? G.Beasts.passive('heal', 1) : 1); }
   /* null-safe v7.0 Undervault affix check */
   function vHas(id) { return G.Vault && G.Vault.has(id); }
+  /* null-safe v8.0 accessors: class mastery, gear enchants, difficulty */
+  function mFx(d, key) { return G.Mastery ? G.Mastery.fx(d.cls, key) : 0; }
+  function enchFx(d, key) { return G.Forge ? G.Forge.enchFx(d, key) : 0; }
+  function diffMult() { return G.Options ? G.Options.diffMult() : 1; }
 
   /* ---------- status effects (v4.0) ---------- */
   function estatus(e) { if (!e.status) e.status = { burn: 0, chill: 0, bleed: 0, ward: false }; return e.status; }
@@ -76,14 +80,15 @@
       var ascHp = G.Ascension ? G.Ascension.enemyHp() : 1;
       var ascBoss = (def.boss && G.Ascension) ? G.Ascension.guardianHp() : 1;
       var giltHp = vHas('gilt') ? 1.25 : 1; // the Gilt affix swells the enemy with the loot it guards
-      var eScale = (def.boss ? 1 : s) * moodEnemy() * omenMult('enemyHp') * ascHp * ascBoss * giltHp;
+      var diff = diffMult();                 // v8 difficulty preset (separate from Ascension)
+      var eScale = (def.boss ? 1 : s) * moodEnemy() * omenMult('enemyHp') * ascHp * ascBoss * giltHp * diff;
       var hp = Math.max(1, Math.round(def.hp * eScale));
       var relSpd = relAdd('enemySpd');
       var dmgBonus = omenAdd('enemyDmg') + (G.Ascension ? G.Ascension.enemyDmg() : 0);
       return {
         uid: 'e' + i + '_' + id, id: id, name: def.name,
         hp: hp, maxHp: hp,
-        dmg: [Math.round(def.dmg[0] * s * moodEnemy()) + dmgBonus, Math.round(def.dmg[1] * s * moodEnemy()) + dmgBonus],
+        dmg: [Math.round(def.dmg[0] * s * moodEnemy() * diff) + dmgBonus, Math.round(def.dmg[1] * s * moodEnemy() * diff) + dmgBonus],
         spd: def.spd + relSpd, crit: def.crit || 0.05,
         special: def.special || null, boss: !!def.boss,
         rotIdx: 0, look: def.look, tags: def.tags || [], nonlethal: !!def.nonlethal,
@@ -221,6 +226,40 @@
     return c && c.awaiting ? G.Delvers.get(c.awaiting) : null;
   };
 
+  /* v8: auto-resolve — play a safe strike/heal policy until the fight ends or a
+   * delver is endangered (then it hands control back). Never flees or dies quietly. */
+  C.autoResolve = function () {
+    var guard = 0;
+    while (guard++ < 500) {
+      var c = C.cur();
+      if (!c || c.over) break;
+      var d = C.actor();
+      if (!d) break; // enemy mid-resolution; shouldn't persist, but bail safely
+      var ex = G.state.expedition;
+      var mhp = G.Delvers.maxHp(d);
+      // stop and return control if anyone on the team is in real danger
+      var danger = G.Exp.team().some(function (x) { return x.hp < G.Delvers.maxHp(x) * 0.3; });
+      if (danger) return { ok: true, stopped: true };
+      var skill = G.Delvers.skillOf(d);
+      if (d.hp < mhp * 0.4 && ex.bandages > 0) C.act({ type: 'item', target: d.id });
+      else if (skill.kind !== 'command' && skill.kind !== 'heal' && c.grit >= skill.cost) C.act({ type: 'skill', target: (C.firstLivingEnemy() || {}).uid });
+      else C.act({ type: 'strike', target: (C.firstLivingEnemy() || {}).uid });
+    }
+    return { ok: true, stopped: false };
+  };
+  /* is auto-resolve safe to offer right now? (winning and nobody hurting) */
+  C.autoSafe = function () {
+    var c = C.cur();
+    if (!c || c.over) return false;
+    var teamHp = 0, teamMax = 0;
+    G.Exp.team().forEach(function (d) { teamHp += d.hp; teamMax += G.Delvers.maxHp(d); });
+    var enemyHp = 0, enemyMax = 0;
+    c.enemies.forEach(function (e) { enemyHp += Math.max(0, e.hp); enemyMax += e.maxHp; });
+    var anyBoss = c.enemies.some(function (e) { return e.boss && e.hp > 0; });
+    // safe when the team is healthy and the remaining enemy mass is modest and not a boss
+    return !anyBoss && teamMax > 0 && teamHp / teamMax > 0.6 && enemyHp <= teamHp * 0.6;
+  };
+
   /* self-chill: a chilled delver's blows land softer */
   function selfChillMult(d) { return chilled(C.cur().dstat && C.cur().dstat[d.id]) ? 0.7 : 1; }
 
@@ -239,7 +278,7 @@
         if (!e) break;
         var dmg = C.eff(d, 'might') + gAtk(d) + beastPassive('dmg', 0) + wildFury() + G.rint(0, 3);
         dmg = Math.round(dmg * C.curseMult() * selfChillMult(d) * (talent(d, 'first_blood') && c.round === 1 ? 1.5 : 1));
-        var critP = G.BAL.critBase + d.stats.luck * G.BAL.critPerLuck + gFx(d, 'crit');
+        var critP = G.BAL.critBase + d.stats.luck * G.BAL.critPerLuck + gFx(d, 'crit') + mFx(d, 'crit');
         var crit = G.rchance(critP);
         var critMult = talent(d, 'assassinate') ? 2.25 : G.BAL.critMult;
         if (crit) dmg = Math.round(dmg * critMult);
@@ -262,7 +301,7 @@
         break;
       }
       case 'skill': {
-        var skill = G.Delvers.cls(d).skill;
+        var skill = G.Delvers.skillOf(d);
         var cost = skill.cost - (skill.id === 'emberlance' && talent(d, 'overchannel') ? 1 : 0);
         if (c.grit < cost) { c.awaiting = d.id; return { ok: false, msg: 'Not enough Grit.' }; }
         c.grit -= Math.max(0, cost);
@@ -352,15 +391,17 @@
     var c = C.cur(), ex = G.state.expedition;
     var a = bdef.active;
     var living = c.enemies.filter(function (e) { return e.hp > 0; });
+    // v8: Warden class mastery lifts every companion's bite while a Warden bonds the pack
+    var bdmg = (G.Mastery && G.Beasts && G.Beasts.wardenBond()) ? G.Mastery.fx('warden', 'beastDmg') : 0;
     switch (a.kind) {
       case 'bite': {
         var e = C.enemyByUid(targetUid) || living[0];
-        if (e) { G.Exp.elog(bdef.name + ' lunges — ' + a.name + '!', 'good'); C.damageEnemy(e, a.power, null, false, bdef.name); }
+        if (e) { G.Exp.elog(bdef.name + ' lunges — ' + a.name + '!', 'good'); C.damageEnemy(e, a.power + bdmg, null, false, bdef.name); }
         break;
       }
       case 'scorch': {
         G.Exp.elog(bdef.name + ' breathes cinders across the line!', 'good');
-        living.forEach(function (e) { C.damageEnemy(e, a.power, null, false, bdef.name); if (e.hp > 0) C.applyStatus(e, 'burn', 2); });
+        living.forEach(function (e) { C.damageEnemy(e, a.power + bdmg, null, false, bdef.name); if (e.hp > 0) C.applyStatus(e, 'burn', 2); });
         break;
       }
       case 'shriek': {
@@ -401,7 +442,7 @@
       return;
     }
     if (skill.kind === 'heal') {
-      var amt = skill.power(d) + (talent(d, 'stronger_brew') ? 3 : 0);
+      var amt = skill.power(d) + (talent(d, 'stronger_brew') ? 3 : 0) + mFx(d, 'heal');
       if (talent(d, 'great_tonic')) amt = Math.round(amt * 1.5);
       amt = Math.round(amt * healScale());
       // Revivify: bring back a teammate who fell this fight
@@ -442,7 +483,7 @@
     }
     var empower = (talent(d, 'empower') ? 1.4 : 1) * selfChillMult(d);
     if (skill.target === 'allEnemies') {
-      var base = Math.round((skill.power(d) + gAtk(d) + beastPassive('dmg', 0) + wildFury() + (talent(d, 'wide_lance') ? 2 : 0)) * empower * C.curseMult());
+      var base = Math.round((skill.power(d) + gAtk(d) + beastPassive('dmg', 0) + wildFury() + mFx(d, 'skillDmg') + (talent(d, 'wide_lance') ? 2 : 0)) * empower * C.curseMult());
       var living = c.enemies.filter(function (e) { return e.hp > 0; });
       var hitCount = living.length;
       living.forEach(function (e) {
@@ -453,8 +494,8 @@
     } else {
       var e = C.enemyByUid(targetUid) || C.firstLivingEnemy();
       if (!e) return;
-      var dmg = Math.round((skill.power(d) + gAtk(d) + beastPassive('dmg', 0) + wildFury() + G.rint(0, 3)) * empower * C.curseMult());
-      var critP = G.BAL.critBase + d.stats.luck * G.BAL.critPerLuck + (skill.critBonus || 0) + gFx(d, 'crit');
+      var dmg = Math.round((skill.power(d) + gAtk(d) + beastPassive('dmg', 0) + wildFury() + mFx(d, 'skillDmg') + G.rint(0, 3)) * empower * C.curseMult());
+      var critP = G.BAL.critBase + d.stats.luck * G.BAL.critPerLuck + (skill.critBonus || 0) + gFx(d, 'crit') + mFx(d, 'crit');
       var crit = G.rchance(critP);
       if (crit) dmg = Math.round(dmg * (talent(d, 'assassinate') ? 2.25 : G.BAL.critMult));
       C.damageEnemy(e, dmg, d, crit, skill.name);
@@ -520,6 +561,8 @@
     }
     G.Exp.elog((label ? label + ': ' : '') + (src ? src.name : '?') + ' hits ' + e.name + ' for ' + dmg + (crit ? ' — critical!' : '.'), crit ? 'crit' : 'info');
     G.emit('fx', { t: 'hit', side: 'enemy', uid: e.uid, amt: dmg, crit: crit });
+    // v8: a Vampiric weapon returns a share of the damage as health
+    if (src && src.cls && src.alive) { var ls = enchFx(src, 'lifesteal'); if (ls) { var gain = Math.max(1, Math.round(dmg * ls)); src.hp = Math.min(G.Delvers.maxHp(src), src.hp + gain); G.emit('fx', { t: 'heal', who: src.id, amt: gain }); } }
     if (e.hp <= 0) {
       e.hp = 0;
       C.onEnemyDeath(e, src);
@@ -532,6 +575,8 @@
     ex.killCount++;
     st.stats.kills++;
     if (src) src.kills++;
+    // v8: credit the kill toward the killer's class mastery
+    if (src && src.cls && G.Mastery) G.Mastery.credit(src.cls);
     // Pickpocket: killer skims a little extra
     if (src && G.Delvers.hasTalent(src, 'pickpocket')) ex.marksFound += G.rint(1, 2);
     // loot
@@ -761,13 +806,15 @@
     var ex = G.state.expedition;
     // status ward eats the blow entirely
     var ds = C.dstatus(d.id);
+    // v8: a Warding enchant may flare a ward the instant the blow lands
+    if (!ds.ward) { var wh = enchFx(d, 'wardHit'); if (wh && G.rchance(wh)) { ds.ward = true; G.Exp.elog(d.name + '’s warded armour flares.', 'good'); } }
     if (ds.ward) { ds.ward = false; G.Exp.elog(d.name + '’s ward flares and eats the blow.', 'good'); G.emit('fx', { t: 'status', side: 'delver', who: d.id, kind: 'ward' }); return 0; }
     if (c.guarding[d.id]) {
       dmg = Math.max(1, Math.round(dmg * G.BAL.guardReduce));
       // Counterweight: guarding reflects a little damage back
       if (talent(d, 'counterweight') && e.hp > 0) C.damageEnemy(e, 3, d, false, 'counter');
     }
-    dmg = Math.max(1, dmg - gDef(d)); // armor: flat reduction, never below 1
+    dmg = Math.max(1, dmg - gDef(d) - mFx(d, 'def')); // armor + Vanguard mastery: flat reduction, never below 1
     if (talent(d, 'stone_skin')) dmg = Math.max(1, dmg - 2);
     d.hp -= dmg;
     G.Exp.elog(e.name + ' hits ' + d.name + ' for ' + dmg + (crit ? ' — savage!' : '.'), 'bad');

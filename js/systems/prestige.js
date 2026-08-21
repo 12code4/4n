@@ -42,9 +42,13 @@
    * the legacy store (marks + already-bought perks). */
   P.retire = function (ascTier) {
     var earned = P.retireValue();
-    var leg = G.state.legacy || { marks: 0, perks: [] };
+    // v8: bank this charter's class-mastery kills before we wipe the charter
+    if (G.Mastery) G.Mastery.bankToLegacy();
+    // merge into the FULL persistent store so ascMax / vaultRecord / mastery / endings survive
+    var leg = P.loadLegacy();
     leg.marks = (leg.marks || 0) + earned;
     leg.charters = (leg.charters || 0) + 1;
+    leg.perks = (G.state.legacy && G.state.legacy.perks) || leg.perks || [];
     P.saveLegacy(leg);
     G.wipeSave();
     G.newGame(); // reads legacy back in (see state.js applyLegacy)

@@ -36,6 +36,8 @@
   D.trait = function (d) { return G.U.byId(G.DATA.traits, d.trait) || {}; };
   D.fear = function (d) { return G.U.byId(G.DATA.fears, d.fear) || {}; };
   D.cls = function (d) { return G.DATA.classes[d.cls]; };
+  /* v8: a delver's active skill — a legend may carry a signature skill of their own */
+  D.skillOf = function (d) { return (d && d.skill) || G.DATA.classes[d.cls].skill; };
   D.maxHp = function (d) { return d.stats.vig; };
   D.wage = function (d) {
     if (d.freeDays > 0) return 0;
@@ -164,8 +166,10 @@
     st.graveyard.push({
       name: d.name, cls: d.cls, lvl: d.lvl, day: st.day,
       cause: cause || 'the Maw',
-      epitaph: G.rpick(G.DATA.names.epitaphs), honored: false
+      epitaph: G.rpick(G.DATA.names.epitaphs), honored: false,
+      legend: d.legend || null // v8: the Hall of Legends remembers how they fell
     });
+    if (d.legend && G.Legends) G.Legends.onFall(d.legend);
     // the Priest's blessing: a share of a fallen delver's experience returns as renown
     if (G.Quests && G.Quests.hasPerk('grave_blessing') && G.Renown) {
       var back = Math.max(2, Math.round(d.lvl * 2));

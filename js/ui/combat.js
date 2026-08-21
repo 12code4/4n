@@ -97,7 +97,7 @@
     // actions for awaiting delver
     var actor = G.Combat.actor();
     if (actor) {
-      var skill = G.Delvers.cls(actor).skill;
+      var skill = G.Delvers.skillOf(actor);
       panel.appendChild(h('h3', { text: actor.name + ' acts' }));
       var acts = h('div.actions');
       acts.appendChild(h('button', {
@@ -135,6 +135,13 @@
           onclick: function () { act({ type: 'beast', beastId: bdef.id, target: UI.combatTarget }); }
         }));
       });
+      // v8: auto-resolve a safely-won fight (opt-in via Options)
+      if (G.Options && G.Options.autoResolve() && G.Combat.autoSafe()) {
+        acts.appendChild(h('button', {
+          html: '⏩ <b>Auto-resolve</b><br><span class="sub">finish this safe fight</span>',
+          onclick: function () { var r = G.Combat.autoResolve(); if (r.stopped) UI.toast('Paused — someone’s in danger.', 'bad'); UI.refresh(); }
+        }));
+      }
       // v7: shift the front/back line (costs the turn) — offered once a formation is set
       var showShift = ex.rows && Object.keys(ex.rows).length > 0;
       if (showShift) {

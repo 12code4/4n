@@ -121,4 +121,17 @@
     });
     return st;
   };
+
+  // v7 (7.0 "The Undervault") → v8 (8.0 "Legends of the Maw")
+  G.migrations[7] = function (st) {
+    if (!st.mastery) st.mastery = {};
+    if (!st.legendsRecruited) st.legendsRecruited = {};
+    if (st.trueEnding === undefined) st.trueEnding = false;
+    if (!st._legMastery) st._legMastery = {};
+    if (!st._legEndings) st._legEndings = (st.endings || []).slice();
+    G.DATA.materialList().forEach(function (m) {
+      if (st.market[m.id] === undefined) st.market[m.id] = m.base;
+    });
+    return st;
+  };
 })();

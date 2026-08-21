@@ -37,7 +37,8 @@
   P.paint = function (cx, d, S) {
     var r = rngFromSeed((d.face >>> 0) ^ 0x9e3779b9);
     var cls = G.DATA.classes[d.cls];
-    var hue = cls ? cls.hue : 40;
+    var legend = d.legend && G.DATA.legends ? G.DATA.legends[d.legend] : null;
+    var hue = legend ? legend.hue : (cls ? cls.hue : 40);
     var cxm = S / 2;
 
     // background disc tinted by class
@@ -98,5 +99,17 @@
     // class emblem dot
     cx.fillStyle = 'hsl(' + hue + ',70%,60%)';
     cx.beginPath(); cx.arc(S * 0.85, S * 0.85, S * 0.06, 0, Math.PI * 2); cx.fill();
+
+    // v8: legends wear a small gold laurel and a ringed frame
+    if (legend) {
+      cx.strokeStyle = 'rgba(230,200,110,0.9)'; cx.lineWidth = S * 0.04;
+      cx.beginPath(); cx.arc(cxm, cxm, S * 0.47, 0, Math.PI * 2); cx.stroke();
+      cx.fillStyle = '#e6c86e';
+      // a small star above the brow
+      var sx = cxm, sy = S * 0.2, rr = S * 0.05;
+      cx.beginPath();
+      for (var i = 0; i < 10; i++) { var a = -Math.PI / 2 + i * Math.PI / 5; var rad = i % 2 ? rr * 0.45 : rr; cx.lineTo(sx + Math.cos(a) * rad, sy + Math.sin(a) * rad); }
+      cx.closePath(); cx.fill();
+    }
   };
 })();

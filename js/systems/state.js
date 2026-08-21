@@ -43,6 +43,8 @@
       loan: null,                          // v6 countinghouse loan
       hints: {},                           // v6 onboarding
       deepRecord: 0,                       // v7 deepest Undervault stratum this charter
+      mastery: {},                         // v8 this-charter kills per class (folded to legacy on retire)
+      legendsRecruited: {},                // v8 which legends signed this charter
       unlockedStart: 1,                    // deepest depth an expedition may START at
       guardiansSlain: {},                  // biomeId -> true
       expedition: null,
@@ -84,6 +86,8 @@
     var leg = G.Prestige.loadLegacy();
     st.legacy = { marks: leg.marks || 0, perks: (leg.perks || []).slice(), charters: leg.charters || 0 };
     st.ascMax = leg.ascMax || 0; // the Ascension ladder carries across charters
+    st._legMastery = leg.mastery || {};   // v8 cross-charter class-mastery baseline
+    st._legEndings = (leg.endings || []).slice(); // v8 Heart endings reached across charters (true-ending gate)
     var fx = function (k) { return G.Prestige.fx(k); };
     // startMarks
     var sm = fx('startMarks'); if (sm) st.marks += sm;

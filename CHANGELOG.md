@@ -1,5 +1,48 @@
 # Changelog — The Gilded Maw
 
+## v8.0 — "Legends of the Maw" — final release
+
+The company becomes legend; the game becomes a keepsake. The last patch adds
+named heroes, deep gear and class craft, a full options suite, and a true ending
+that answers Maren's question for good.
+
+### Legendary delvers
+- Four hand-authored **unique heroes**, each with fixed stats, a **signature
+  skill**, pre-learned talents, a laurel-ringed portrait, and a backstory that
+  threads the whole game: **Corvo One-Arm** (the Warden who lost an arm to the
+  First Warden), **Yove Vantry** (the Cartographer's daughter), **Wick Alder**
+  (Petra's apprentice), and **the Nameless Pilgrim** (who walked into the Heart
+  and came back without a name).
+- Each is recruited by meeting a condition that threads the story — reach the
+  Undervault, raise the Cartographer's Table, finish Petra's questline, stand at
+  the Heart. A **Hall of Legends** in the Charter Hall tells their tales and
+  remembers how they fell.
+
+### Enchanting & class mastery
+- **Gear enchanting**: reforge an armory piece with a prefix affix — Keen,
+  Heavy, Bulwark, Steady, **Vampiric** (lifesteal), **Warding** (ward-on-hit).
+- **Class mastery**: kills by each class accumulate across **every charter** and
+  earn permanent, company-wide craft — Vanguard damage-reduction, Scout crit,
+  Warden beast-damage, Alchemist healing, Arcanist skill-damage.
+
+### Options, accessibility & records
+- An **Options** screen: **difficulty presets** (Story / Standard / Brutal,
+  separate from Ascension), **colorblind palette**, **reduced motion**, combat
+  **auto-resolve** for safely-won fights, and combat speed.
+- A **Records** hall — the company's whole lifetime account and every class's
+  mastery — plus a **Credits** keepsake page that celebrates a complete Codex.
+
+### The true ending
+- Once all three Heart answers have been given (across charters), the Heart
+  offers a fourth: **The Reckoning** — audit the Maw its own ledger and square
+  the books at last, a grand windfall and a New-Charter++ seal.
+
+### Polish & release
+- Legend portraits with a gold laurel; reduced-motion and colorblind honored in
+  the gfx and DOM; save migration v7 → v8 (v1 saves still load into v8). New v8
+  test coverage — legends, enchanting, mastery, difficulty scaling, lifesteal,
+  and the true ending — all green. The line closes at **8.0**.
+
 ## v7.0 — "The Undervault"
 
 The Trade ending said the Vault opens below the Heart. Now it does — an endless,

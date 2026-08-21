@@ -6,6 +6,7 @@
   function boot() {
     G.GFX.init();
     if (G.Audio) G.Audio.init();
+    if (G.Options) G.Options.apply(); // v8: reflect saved accessibility prefs
 
     // HUD wiring (buttons persist; panel/scene swap per screen)
     document.getElementById('hud-endday').addEventListener('click', function () {
