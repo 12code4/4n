@@ -126,6 +126,7 @@
     ex.map = X.genFloor(depth);
     ex.at = ex.map.rows[0][0].id;
     ex.map.rows[0][0].done = true;
+    ex.bypass = false; // a skip-rank blessing never carries between floors
     ex.daysOut++;
     G.Economy.expeditionDays(G.BAL.daysPerDepth);
     // rations: one per living member
@@ -188,11 +189,13 @@
     if (ex.torches > 0) ex.torches--;
     else {
       var team = X.team();
+      var hurt = 0;
       team.forEach(function (d) {
         var t = G.Delvers.trait(d);
-        if (!t.noDark) d.hp = Math.max(1, d.hp - G.BAL.darknessHp);
+        if (!t.noDark) { d.hp = Math.max(1, d.hp - G.BAL.darknessHp); hurt++; }
       });
-      X.elog('The team gropes forward in the dark. (-' + G.BAL.darknessHp + ' hp)', 'bad');
+      if (hurt) X.elog('The team gropes forward in the dark. (-' + G.BAL.darknessHp + ' hp)', 'bad');
+      else X.elog('The team gropes forward in the dark — the tunnel-born lead the way.', 'info');
     }
 
     if (ex.bypass && node.type !== 'shaft' && node.type !== 'guardian') {

@@ -343,8 +343,13 @@
       if (ex.loot[id] <= 0) delete ex.loot[id];
     }
     G.Exp.elog('The team breaks and runs — packs lightened in the scramble.', 'bad');
+    var wasGuardian = c.guardian;
     ex.combat = null;
-    ex.mode = 'map';
+    // A guardian fight happens ON the guardian node — the floor's final rank,
+    // which has no outgoing edges. Returning to 'map' there strands the team on
+    // a dead-end node. Send them back to the guardian approach instead, from
+    // which they can surface or steel themselves for another attempt.
+    ex.mode = wasGuardian ? 'guardian' : 'map';
     G.emit('combatEnd', 'fled');
     G.emit('expedition');
   };

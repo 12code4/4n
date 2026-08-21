@@ -34,6 +34,19 @@
       },
       hue: 130
     },
+    alchemist: {
+      id: 'alchemist', name: 'Alchemist', icon: 'flask', v: 2,
+      desc: 'Brews the Maw into bottles. Mends the whole line; sharpens every bandage.',
+      base: { vig: 20, might: 4, wits: 8, luck: 6 },
+      growth: { vig: 2.2, might: 0.5, wits: 1.4, luck: 0.8 },
+      skill: {
+        id: 'field_tonic', name: 'Field Tonic', cost: 2, target: 'party', kind: 'heal',
+        power: function (d) { return 4 + Math.round(d.stats.wits * 0.5); },
+        desc: 'A shared draught: heals the whole team.'
+      },
+      passive: 'bandage40', // bandages heal +40% while an Alchemist stands
+      hue: 95
+    },
     arcanist: {
       id: 'arcanist', name: 'Arcanist', icon: 'orb',
       desc: 'Reads the Maw’s grammar. Area damage and wards.',

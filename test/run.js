@@ -317,6 +317,65 @@ section('Campaign: 80 in-game days of mixed play');
   ok(G.serialize() === a, 'mature-state save round-trip stable');
 })();
 
+/* ---------------- regression: guardian flee must not strand the team ---------------- */
+section('Regression: fleeing a guardian never softlocks');
+(function () {
+  var stranded = 0, exceptions = 0;
+  for (var run = 0; run < 60; run++) {
+    G.newGame(50000 + run);
+    var st = G.state;
+    st.marks = 300;
+    var guard = 0;
+    while (G.Delvers.roster().length < 3 && guard++ < 20) {
+      if (!st.tavernPool.length) G.Delvers.refreshPool(true);
+      G.Delvers.hire(0);
+    }
+    G.Economy.buySupply('torches', 20);
+    G.Economy.buySupply('rations', 20);
+    var team = G.Delvers.roster().slice(0, 3).map(function (d) { return d.id; });
+    G.Exp.launch(team, 1);
+    var steps = 0;
+    try {
+      while (st.expedition && steps++ < 4000) {
+        var ex = st.expedition;
+        if (ex.mode === 'map') {
+          var cs = G.Exp.nextChoices();
+          // this is exactly the softlock symptom: map mode with no way forward
+          ok(cs.length > 0 || G.Exp.canDescend() === false, 'map mode offers a choice or an exit exists');
+          if (!cs.length) { stranded++; G.Exp.surface(); continue; }
+          // prefer guardian/shaft nodes to reach the boss fast
+          var pick = cs.filter(function (n) { return n.type === 'guardian'; })[0] ||
+                     cs.filter(function (n) { return n.type === 'shaft'; })[0] || G.rpick(cs);
+          G.Exp.move(pick.id);
+        } else if (ex.mode === 'combat') {
+          var actor = G.Combat.actor();
+          if (!actor) break;
+          // ALWAYS try to flee — including guardian fights (the excluded case)
+          G.Combat.act({ type: 'flee' });
+        } else if (ex.mode === 'event') {
+          if (ex.event.stage === 'choose') {
+            var def = G.Exp.eventDef(); var avail = [];
+            def.choices.forEach(function (ch, i) { if (G.Exp.choiceAvailable(ch)) avail.push(i); });
+            G.Exp.chooseEvent(avail[avail.length - 1]);
+          } else G.Exp.closeEvent();
+        } else if (ex.mode === 'peddler') G.Exp.leavePeddler();
+        else if (ex.mode === 'shaft') { if (G.Exp.canDescend()) G.Exp.descend(); else G.Exp.surface(); }
+        else if (ex.mode === 'guardian') {
+          // face it (then the flee policy kicks in), but sometimes just leave
+          if (G.rchance(0.7)) G.Exp.fightGuardian(); else G.Exp.surface();
+        }
+        else if (ex.mode === 'guardian_won') G.Exp.surface();
+        else break;
+      }
+    } catch (e) { exceptions++; console.error('  ✗ flee-regression exception: ' + (e && e.stack || e)); }
+    ok(steps < 4000, 'flee-run terminates (' + steps + ')');
+    ok(!st.expedition, 'flee-run cleaned up');
+  }
+  ok(stranded === 0, stranded + ' runs stranded the team in map mode with no exit');
+  ok(exceptions === 0, exceptions + ' exceptions in flee regression');
+  console.log('  » 60 flee-everything runs, ' + stranded + ' softlocks');
+})();
+
 console.log('');
 if (failures) {
   console.error('FAIL: ' + failures + ' of ' + checks + ' checks failed.');

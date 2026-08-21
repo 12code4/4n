@@ -36,6 +36,28 @@
       ],
       sellBonus: [0.08, 0.16, 0.25]
     },
+    forge: {
+      id: 'forge', name: 'The Forge', icon: 'anvil', v: 2,
+      desc: 'An anvil, a quench trough, and a furnace fed on Maw-heat. Turn loot into arms.',
+      costs: [80, 200, 420],
+      levels: [
+        'L1 — Craft tier I gear.',
+        'L2 — Craft tier II gear.',
+        'L3 — Craft tier III gear.'
+      ],
+      tier: [1, 2, 3]
+    },
+    contracts: {
+      id: 'contracts', name: 'Contracts Board', icon: 'board', v: 2,
+      desc: 'A notice board and a clerk’s stool. The valley’s buyers post wants; you post prices.',
+      costs: [60, 150, 320],
+      levels: [
+        'L1 — 1 active contract; local clients.',
+        'L2 — 2 active contracts; better clients.',
+        'L3 — 3 active contracts; the capital calls.'
+      ],
+      slots: [1, 2, 3], clientBonus: [0, 0.1, 0.25]
+    },
     infirmary: {
       id: 'infirmary', name: 'Infirmary', icon: 'cross',
       desc: 'Cots, splints, and a stubborn refusal to let the Maw finish the job.',

@@ -61,7 +61,14 @@
     panel.appendChild(h('h3', { text: 'Choose the way' }));
     var choices = G.Exp.nextChoices();
     if (!choices.length) {
-      panel.appendChild(h('p.sub', { text: 'Dead end — this should not happen. The shaft calls you home.' }));
+      // Belt-and-braces: a node with no exits (e.g. a guardian node after a flee)
+      // should never strand the team. The rope home is always an option.
+      panel.appendChild(h('p.sub', { text: 'The passage ahead is sealed. The winch-rope is not.' }));
+      panel.appendChild(h('button.primary', {
+        text: '▲ Surface with the haul',
+        style: 'width:100%;margin-top:6px',
+        onclick: function () { G.Exp.surface(); }
+      }));
     }
     choices.forEach(function (n) {
       panel.appendChild(h('button.choice', {
