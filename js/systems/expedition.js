@@ -138,8 +138,8 @@
         X.elog(team[i].name + ' goes hungry (-' + G.BAL.rationHungerHp + ' hp).', 'bad');
       }
     }
-    if (depth >= 2) X.unlockJournal('depth2');
-    if (depth >= 3) X.unlockJournal('depth3');
+    // reaching a depth unlocks any journal page keyed to it
+    for (var jd = 2; jd <= depth; jd++) X.unlockJournal('depth' + jd);
     X.elog('— Depth ' + depth + ': ' + G.DATA.biomeForDepth(depth).name + ' —', 'story');
   };
 
@@ -274,7 +274,8 @@
   };
 
   X.runHazard = function (depth) {
-    var hazards = [
+    var biome = G.DATA.biomeForDepth(depth);
+    var hazards = biome.hazards || [
       { name: 'Rockfall', stat: 'might', text: 'The roof lets go over the passage!' },
       { name: 'Gas pocket', stat: 'wits', text: 'The torch flame turns green — bad air!' },
       { name: 'Glass field', stat: 'luck', text: 'The floor is a field of upturned ember-glass razors.' }
@@ -461,7 +462,7 @@
     var st = G.state, ex = st.expedition;
     var total = 0;
     for (var id in ex.loot) {
-      total += Math.floor(G.state.market[id] * 0.7) * ex.loot[id];
+      total += Math.floor(G.Economy.price(id) * 0.7) * ex.loot[id];
     }
     if (!total) return { ok: false, msg: 'Nothing to sell.' };
     ex.loot = {};
@@ -508,10 +509,11 @@
     var haul = 0;
     for (var id in ex.loot) {
       st.inventory[id] = (st.inventory[id] || 0) + ex.loot[id];
-      haul += (st.market[id] || 0) * ex.loot[id];
+      haul += G.Economy.price(id) * ex.loot[id];
     }
+    var survivors = X.team();
     // greedy pocket: chance a greedy delver skims
-    X.team().forEach(function (d) {
+    survivors.forEach(function (d) {
       var t = G.Delvers.trait(d);
       if (t.pocket && G.rchance(t.pocket) && ex.marksFound > 4) {
         var skim = Math.ceil(ex.marksFound * 0.15);
@@ -519,6 +521,8 @@
         G.log(d.name + ' reports the count a little light. (' + skim + 'ᵯ missing)', 'bad');
       }
     });
+    // the badly-hurt may carry a wound home (v2.0 injuries)
+    if (G.Economy.checkInjuries) G.Economy.checkInjuries(survivors);
     st.marks += ex.marksFound;
     st.stats.earned += ex.marksFound;
     st.supplies.torches += ex.torches;

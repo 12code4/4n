@@ -11,7 +11,7 @@
       _rng: null,
       day: 1,
       marks: G.BAL.startMarks,
-      buildings: { storehouse: 1, tavern: 0, assay: 0, infirmary: 0 },
+      buildings: { storehouse: 1, tavern: 0, assay: 0, infirmary: 0, forge: 0, contracts: 0 },
       delvers: [],
       nextDelverN: 1,
       tavernPool: [],
@@ -19,6 +19,10 @@
       inventory: {},                       // materialId -> qty
       supplies: G.U.deep(G.BAL.startSupplies),
       market: {},                          // materialId -> price
+      marketPrev: {},
+      marketEvents: [],                    // active price shocks (v2)
+      armory: [],                          // company gear pool (v2)
+      contracts: { offers: [], active: [] }, // v2
       unlockedStart: 1,                    // deepest depth an expedition may START at
       guardiansSlain: {},                  // biomeId -> true
       expedition: null,

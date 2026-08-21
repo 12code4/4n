@@ -5,6 +5,19 @@
 
   C.scale = function (depth) { return 1 + (depth - 1) * 0.07; };
 
+  /* null-safe gear accessors (Forge system is v2.0; may be absent in old saves/tests) */
+  function gAtk(d) { return G.Forge ? G.Forge.atk(d) : 0; }
+  function gDef(d) { return G.Forge ? G.Forge.def(d) : 0; }
+  function gFx(d, k) { return G.Forge ? G.Forge.fx(d, k) : 0; }
+  /* does the team field a class with a given passive right now? */
+  C.teamPassive = function (name) {
+    var team = G.Exp.team();
+    for (var i = 0; i < team.length; i++) {
+      if (G.Delvers.cls(team[i]).passive === name) return true;
+    }
+    return false;
+  };
+
   C.start = function (groupIds, opts) {
     opts = opts || {};
     var st = G.state, ex = st.expedition;
@@ -23,11 +36,15 @@
       };
     });
     ex.mode = 'combat';
+    // starting grit: base + best gritStart trinket on the team
+    var startGrit = G.BAL.gritStart;
+    G.Exp.team().forEach(function (d) { startGrit = Math.max(startGrit, G.BAL.gritStart + gFx(d, 'gritStart')); });
     ex.combat = {
-      enemies: enemies, grit: G.BAL.gritStart, round: 0,
+      enemies: enemies, grit: G.U.clamp(startGrit, 0, G.BAL.gritMax), round: 0,
       queue: [], turn: -1, over: false, result: null,
       guardian: !!opts.guardian, firstStrike: !!opts.firstStrike,
-      guarding: {}, taunt: {}, shaken: {}, fledFail: false
+      guarding: {}, taunt: {}, shaken: {}, fledFail: false,
+      reforged: 0
     };
     // fear check
     var tags = {};
@@ -120,8 +137,8 @@
       case 'strike': {
         var e = C.enemyByUid(action.target) || C.firstLivingEnemy();
         if (!e) break;
-        var dmg = C.eff(d, 'might') + G.rint(0, 3);
-        var critP = G.BAL.critBase + d.stats.luck * G.BAL.critPerLuck;
+        var dmg = C.eff(d, 'might') + gAtk(d) + G.rint(0, 3);
+        var critP = G.BAL.critBase + d.stats.luck * G.BAL.critPerLuck + gFx(d, 'crit');
         var crit = G.rchance(critP);
         if (crit) dmg = Math.round(dmg * G.BAL.critMult);
         C.damageEnemy(e, dmg, d, crit);
@@ -148,13 +165,14 @@
         if (!ally || !ally.alive) ally = d;
         ex.bandages--;
         var heal = G.rint(G.BAL.bandageHeal[0], G.BAL.bandageHeal[1]);
+        if (C.teamPassive('bandage40')) heal = Math.round(heal * 1.4); // Alchemist on the line
         ally.hp = Math.min(G.Delvers.maxHp(ally), ally.hp + heal);
         G.Exp.elog(d.name + ' bandages ' + (ally === d ? 'their wounds' : ally.name) + ' (+' + heal + ').', 'good');
         G.emit('fx', { t: 'heal', who: ally.id, amt: heal });
         break;
       }
       case 'flee': {
-        var p = G.BAL.fleeBase + C.eff(d, 'wits') * G.BAL.fleePerWits + (G.Delvers.trait(d).fleeBonus || 0);
+        var p = G.BAL.fleeBase + C.eff(d, 'wits') * G.BAL.fleePerWits + (G.Delvers.trait(d).fleeBonus || 0) + gFx(d, 'flee');
         // scouts are flight experts
         if (d.cls === 'scout') p += 0.1;
         if (c.guardian) p -= 0.15;
@@ -173,8 +191,25 @@
 
   C.useSkill = function (d, skill, targetUid) {
     var c = C.cur();
+    if (skill.kind === 'heal') {
+      // 'party' → whole team; 'ally'/'self' → one target
+      var amt = skill.power(d);
+      if (skill.target === 'party') {
+        G.Exp.team().forEach(function (a) {
+          a.hp = Math.min(G.Delvers.maxHp(a), a.hp + amt);
+          G.emit('fx', { t: 'heal', who: a.id, amt: amt });
+        });
+        G.Exp.elog(d.name + ' works ' + skill.name + ' — the whole team steadies (+' + amt + ').', 'good');
+      } else {
+        var a2 = C.pickHealTarget(targetUid, d);
+        a2.hp = Math.min(G.Delvers.maxHp(a2), a2.hp + amt);
+        G.emit('fx', { t: 'heal', who: a2.id, amt: amt });
+        G.Exp.elog(d.name + ' works ' + skill.name + ' on ' + a2.name + ' (+' + amt + ').', 'good');
+      }
+      return;
+    }
     if (skill.target === 'allEnemies') {
-      var base = skill.power(d);
+      var base = skill.power(d) + gAtk(d);
       var living = c.enemies.filter(function (e) { return e.hp > 0; });
       living.forEach(function (e) {
         C.damageEnemy(e, base + G.rint(0, 2), d, false, skill.name);
@@ -182,8 +217,8 @@
     } else {
       var e = C.enemyByUid(targetUid) || C.firstLivingEnemy();
       if (!e) return;
-      var dmg = skill.power(d) + G.rint(0, 3);
-      var critP = G.BAL.critBase + d.stats.luck * G.BAL.critPerLuck + (skill.critBonus || 0);
+      var dmg = skill.power(d) + gAtk(d) + G.rint(0, 3);
+      var critP = G.BAL.critBase + d.stats.luck * G.BAL.critPerLuck + (skill.critBonus || 0) + gFx(d, 'crit');
       var crit = G.rchance(critP);
       if (crit) dmg = Math.round(dmg * G.BAL.critMult);
       C.damageEnemy(e, dmg, d, crit, skill.name);
@@ -192,6 +227,16 @@
         G.Exp.elog(d.name + ' draws every eye in the dark.', 'info');
       }
     }
+  };
+
+  C.pickHealTarget = function (targetId, fallback) {
+    var a = targetId ? G.Delvers.get(targetId) : null;
+    if (a && a.alive) return a;
+    // default: the most-hurt living teammate
+    var team = G.Exp.team();
+    var low = fallback;
+    team.forEach(function (d) { if (d.hp / G.Delvers.maxHp(d) < low.hp / G.Delvers.maxHp(low)) low = d; });
+    return low;
   };
 
   C.enemyByUid = function (uid) {
@@ -256,6 +301,21 @@
       action = def.rotation[e.rotIdx % def.rotation.length];
       e.rotIdx++;
     }
+    // Bellows Wight and kin: a lung-blast sweep every third round
+    if (e.special === 'gust' && c.round % 3 === 0) action = 'aoe';
+
+    // The Smelted King reforges itself — but the furnace only has so much left
+    if (action === 'reforge') {
+      if (c.reforged < 2) {
+        c.reforged++;
+        var mend = Math.round(e.maxHp * 0.15);
+        e.hp = Math.min(e.maxHp, e.hp + mend);
+        G.Exp.elog(e.name + ' plunges into its own furnace and reforges (+' + mend + ').', 'bad');
+        G.emit('fx', { t: 'heal', who: null, amt: mend, enemy: e.uid });
+        return;
+      }
+      action = 'aoe'; // out of solder — it lashes out instead
+    }
 
     if (action.indexOf('summon:') === 0) {
       var sid = action.split(':')[1];
@@ -276,11 +336,13 @@
       }
     }
 
+    var chorus = C.chorusMult();
+
     if (action === 'aoe') {
       G.Exp.elog(e.name + ' sweeps the whole line!', 'bad');
       team.slice().forEach(function (d) {
         var dmg = G.rint(e.dmg[0], e.dmg[1]);
-        C.damageDelver(d, Math.max(1, Math.round(dmg * 0.7)), e);
+        C.damageDelver(d, Math.max(1, Math.round(dmg * 0.7 * chorus)), e);
       });
       return;
     }
@@ -297,6 +359,7 @@
 
       var dmg = G.rint(e.dmg[0], e.dmg[1]);
       if (e.special === 'slow') dmg = Math.round(dmg * 1.5);
+      dmg = Math.round(dmg * chorus);
       var crit = G.rchance(e.crit);
       if (crit) dmg = Math.round(dmg * 1.5);
       C.damageDelver(target, dmg, e, crit);
@@ -309,10 +372,19 @@
     }
   };
 
+  /* Ashwake Choristers amplify every enemy's blow while they sing. */
+  C.chorusMult = function () {
+    var c = C.cur();
+    var n = 0;
+    c.enemies.forEach(function (e) { if (e.hp > 0 && e.special === 'chorus') n++; });
+    return 1 + 0.2 * n;
+  };
+
   C.damageDelver = function (d, dmg, e, crit) {
     var c = C.cur();
     var ex = G.state.expedition;
     if (c.guarding[d.id]) dmg = Math.max(1, Math.round(dmg * G.BAL.guardReduce));
+    dmg = Math.max(1, dmg - gDef(d)); // armor: flat reduction, never below 1
     d.hp -= dmg;
     G.Exp.elog(e.name + ' hits ' + d.name + ' for ' + dmg + (crit ? ' — savage!' : '.'), 'bad');
     G.emit('fx', { t: 'hit', side: 'delver', who: d.id, amt: dmg, crit: crit });

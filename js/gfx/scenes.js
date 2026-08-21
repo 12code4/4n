@@ -83,10 +83,12 @@
     var st = G.state;
     if (st) {
       var by = H * 0.8, U = F.uW();
-      drawStorehouse(cx, U * 0.06, by, st.buildings.storehouse, t);
-      drawTavern(cx, U * 0.24, by, st.buildings.tavern, t);
-      drawAssay(cx, U * 0.42, by, st.buildings.assay, t);
-      drawInfirmary(cx, U * 0.57, by, st.buildings.infirmary, t);
+      drawStorehouse(cx, U * 0.04, by, st.buildings.storehouse, t);
+      drawTavern(cx, U * 0.20, by, st.buildings.tavern, t);
+      drawAssay(cx, U * 0.36, by, st.buildings.assay, t);
+      drawInfirmary(cx, U * 0.49, by, st.buildings.infirmary, t);
+      if (st.buildings.forge) drawForge(cx, U * 0.62, by, st.buildings.forge, t);
+      if (st.buildings.contracts) drawContractsBoard(cx, U * 0.76, by, st.buildings.contracts, t);
     }
 
     // fog band
@@ -196,6 +198,46 @@
     cx.fillRect(x + w - 21, y - h + 3, 4, 14);
     cx.fillStyle = '#1c130c';
     cx.fillRect(x + w * 0.42, y - 24, 17, 24);
+  }
+
+  function drawForge(cx, x, y, lvl, t) {
+    var w = 80 + lvl * 8, h = 50 + lvl * 6;
+    cx.fillStyle = '#2a1c14';
+    cx.fillRect(x, y - h, w, h);
+    cx.fillStyle = '#3a271a';
+    F.poly(cx, [[x - 5, y - h], [x + w / 2, y - h - 14], [x + w + 5, y - h]]);
+    cx.fill();
+    // furnace mouth glowing
+    var pulse = 0.55 + 0.35 * Math.abs(Math.sin(t * 2.2));
+    F.glow(cx, x + w * 0.5, y - 16, 30, 'rgba(255,110,30,0.9)', pulse);
+    cx.fillStyle = 'rgba(255,150,60,' + pulse + ')';
+    F.rr(cx, x + w * 0.35, y - 26, w * 0.3, 22, 4); cx.fill();
+    // chimney + sparks
+    cx.fillStyle = '#1c130c';
+    cx.fillRect(x + w - 16, y - h - 16, 10, 18);
+    if (Math.random() < 0.2) F.spawn({ x: x + w - 11, y: y - h - 16, vx: (Math.random() - 0.3) * 10, vy: -20, life: 1.2, size: 1.6, color: 'rgba(255,170,60,1)', grav: 20, fade: true, glow: true });
+    // anvil out front
+    cx.fillStyle = '#26242a';
+    cx.fillRect(x + 8, y - 12, 16, 6);
+    cx.fillRect(x + 13, y - 6, 6, 6);
+  }
+  function drawContractsBoard(cx, x, y, lvl, t) {
+    // posts + a board of pinned notices
+    cx.strokeStyle = '#3a271a'; cx.lineWidth = 5;
+    cx.beginPath(); cx.moveTo(x + 6, y); cx.lineTo(x + 6, y - 40); cx.moveTo(x + 54, y); cx.lineTo(x + 54, y - 40); cx.stroke();
+    cx.fillStyle = '#4a3320';
+    F.rr(cx, x, y - 52, 60, 34, 3); cx.fill();
+    cx.strokeStyle = '#2a1c12'; cx.lineWidth = 2; cx.strokeRect(x, y - 52, 60, 34);
+    // pinned papers scale with level
+    var papers = 1 + lvl;
+    cx.fillStyle = '#d8cba8';
+    for (var i = 0; i < papers && i < 4; i++) {
+      var px = x + 6 + (i % 2) * 28, py = y - 48 + Math.floor(i / 2) * 15;
+      cx.save(); cx.translate(px, py); cx.rotate((i % 2 ? 1 : -1) * 0.04);
+      cx.fillRect(0, 0, 22, 12);
+      cx.restore();
+    }
+    F.glow(cx, x + 30, y - 58, 10, 'rgba(255,190,90,0.5)', 0.5); // lantern over the board
   }
 
   /* =================== DELVE MAP =================== */
@@ -398,6 +440,8 @@
       case 'orb': return 12 + 12 * s;
       case 'mass': return 34 * s + 4;
       case 'warden': return 62 * s + 8;
+      case 'hound': return 14 + 12 * s;
+      case 'king': return 60 * s + 10;
       default: return 40;
     }
   }
@@ -453,6 +497,16 @@
       F.glow(cx, ox, oy, 14, hsl(hue, 80, 65), 0.7);
       cx.fillStyle = hsl(hue, 80, 70);
       cx.beginPath(); cx.arc(ox, oy, 4, 0, Math.PI * 2); cx.fill(); // orb
+    } else if (d.cls === 'alchemist') {
+      // apron + a bubbling flask that fumes
+      cx.fillStyle = flash ? '#fff' : hsl(hue, 22, 42);
+      F.rr(cx, x - 8, y - 12, 16, 20, 4); cx.fill(); // apron
+      var fx0 = x + 16, fy0 = y - 6 + Math.sin(t * 3.4) * 2;
+      cx.fillStyle = flash ? '#fff' : hsl(hue, 60, 45);
+      F.poly(cx, [[fx0 - 4, fy0 - 8], [fx0 + 4, fy0 - 8], [fx0 + 6, fy0 + 6], [fx0 - 6, fy0 + 6]]); cx.fill(); // flask
+      F.glow(cx, fx0, fy0 + 2, 9, hsl(hue, 85, 60), 0.6);
+      cx.fillStyle = flash ? '#fff' : hsl(hue, 70, 62);
+      cx.beginPath(); cx.arc(fx0, fy0 + 1, 2.4, 0, Math.PI * 2); cx.fill(); // brew
     }
     cx.restore();
   }
@@ -543,6 +597,46 @@
         cx.fillStyle = flash ? '#fff' : '#b8a26a';
         F.poly(cx, [[x + 22 * S, y - 6 * S], [x + 32 * S, y - 6 * S], [x + 30 * S, y + 4 * S], [x + 24 * S, y + 4 * S]]);
         cx.fill();
+        break;
+      }
+      case 'hound': {
+        // low, quadruped ember-beast with a smoldering back
+        cx.fillStyle = body;
+        cx.beginPath();
+        cx.ellipse(x, y + 4, 22 * S, 11 * S, 0, 0, Math.PI * 2); cx.fill(); // body
+        F.poly(cx, [[x + 16 * S, y - 4], [x + 30 * S, y - 8 * S], [x + 26 * S, y + 6]]); cx.fill(); // head
+        cx.strokeStyle = body; cx.lineWidth = 3;
+        for (var hl = -1; hl <= 1; hl += 2) {
+          cx.beginPath(); cx.moveTo(x + hl * 12 * S, y + 12); cx.lineTo(x + hl * 12 * S, y + 24); cx.stroke();
+          cx.beginPath(); cx.moveTo(x + hl * 4 * S, y + 12); cx.lineTo(x + hl * 4 * S, y + 24); cx.stroke();
+        }
+        // ember mane
+        F.glow(cx, x - 6 * S, y - 4, 16 * S, hsl(hue, 90, 55), 0.5 + 0.2 * Math.sin(t * 6));
+        cx.fillStyle = lite;
+        cx.beginPath(); cx.arc(x + 26 * S, y - 3, 2, 0, Math.PI * 2); cx.fill(); // eye
+        break;
+      }
+      case 'king': {
+        // seated furnace-king with a broken crown of sparks
+        cx.fillStyle = flash ? '#fff' : hsl(hue, 30, 22);
+        F.rr(cx, x - 20 * S, y - 24 * S, 40 * S, 48 * S, 10); cx.fill(); // throne-fused body
+        cx.fillStyle = body;
+        F.rr(cx, x - 14 * S, y - 40 * S, 28 * S, 26 * S, 8); cx.fill(); // torso
+        cx.fillStyle = flash ? '#fff' : hsl(hue, 20, 16);
+        cx.beginPath(); cx.arc(x, y - 44 * S, 10 * S, 0, Math.PI * 2); cx.fill(); // head
+        // molten core
+        var pulse = 0.6 + 0.35 * Math.sin(t * 3);
+        F.glow(cx, x, y - 8 * S, 30 * S, hsl(hue, 95, 55), pulse);
+        cx.fillStyle = hsl(hue, 95, 62);
+        cx.beginPath(); cx.arc(x, y - 8 * S, 6 * S, 0, Math.PI * 2); cx.fill();
+        // crown of sparks
+        cx.strokeStyle = flash ? '#fff' : '#ffcf6a'; cx.lineWidth = 2;
+        for (var cr = -2; cr <= 2; cr++) {
+          var cxk = x + cr * 6 * S;
+          cx.beginPath(); cx.moveTo(cxk, y - 52 * S); cx.lineTo(cxk, y - 60 * S - (cr % 2 ? 4 : 0)); cx.stroke();
+        }
+        cx.fillStyle = lite;
+        cx.beginPath(); cx.arc(x - 3.5 * S, y - 45 * S, 1.8, 0, Math.PI * 2); cx.arc(x + 3.5 * S, y - 45 * S, 1.8, 0, Math.PI * 2); cx.fill();
         break;
       }
     }

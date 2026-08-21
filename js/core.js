@@ -1,9 +1,9 @@
 /* The Gilded Maw — core: namespace, utilities, seeded RNG, event bus, save. */
 (function () {
   var G = (globalThis.G = globalThis.G || {});
-  G.VERSION = '1.0.0';
+  G.VERSION = '2.0.0';
   G.SAVE_KEY = 'gilded_maw_save';
-  G.SAVE_VER = 1;
+  G.SAVE_VER = 2;
 
   /* ---------- utilities ---------- */
   var U = (G.U = {});

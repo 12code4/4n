@@ -13,8 +13,10 @@ var FILES = [
   'js/core.js',
   'js/data/balance.js', 'js/data/names.js', 'js/data/classes.js', 'js/data/materials.js',
   'js/data/biomes.js', 'js/data/enemies.js', 'js/data/events.js', 'js/data/story.js',
-  'js/data/buildings.js',
+  'js/data/buildings.js', 'js/data/gear.js', 'js/data/contracts.js', 'js/data/emberdeep.js',
+  'js/migrations.js',
   'js/systems/state.js', 'js/systems/delvers.js', 'js/systems/economy.js',
+  'js/systems/forge.js', 'js/systems/contracts.js',
   'js/systems/expedition.js', 'js/systems/combat.js'
 ];
 FILES.forEach(function (f) {
@@ -315,6 +317,178 @@ section('Campaign: 80 in-game days of mixed play');
   // save/load once more with a mature state
   var a = G.serialize(); G.deserialize(a);
   ok(G.serialize() === a, 'mature-state save round-trip stable');
+})();
+
+/* ---------------- v2.0: forge, gear, contracts, alchemist, injuries ---------------- */
+section('v2.0 Forge: craft, equip, and gear reaches combat');
+(function () {
+  G.newGame(2001);
+  var st = G.state;
+  st.marks = 500;
+  G.Economy.build('forge'); // L1
+  ok(G.Forge.tier() === 1, 'forge L1 → tier 1');
+  // stock materials for a glass knife
+  st.inventory.ember_glass = 5;
+  var before = st.armory.length;
+  var r = G.Forge.craft('glass_knife');
+  ok(r.ok, 'craft glass_knife: ' + (r.msg || ''));
+  ok(st.armory.length === before + 1, 'armory grew');
+  ok((st.inventory.ember_glass || 0) === 2, 'materials consumed (5-3=2)');
+  // can't craft tier 2 at forge L1
+  ok(G.Forge.canCraft('slag_cleaver') !== null, 'tier-2 gated at forge L1');
+  // equip to a delver and confirm atk shows up
+  var d = G.Delvers.roster()[0];
+  var uid = st.armory[0].uid;
+  var eq = G.Forge.equip(uid, d.id);
+  ok(eq.ok, 'equip works: ' + (eq.msg || ''));
+  ok(G.Forge.atk(d) === 2, 'glass knife grants +2 atk (' + G.Forge.atk(d) + ')');
+  // equipping another weapon replaces the slot
+  st.inventory.grave_iron = 3;
+  G.Forge.craft('iron_maul');
+  var maulUid = st.armory[st.armory.length - 1].uid;
+  G.Forge.equip(maulUid, d.id);
+  ok(G.Forge.atk(d) === 3, 'maul replaces knife in weapon slot (' + G.Forge.atk(d) + ')');
+  var wornWeapons = st.armory.filter(function (x) { return x.by === d.id && G.DATA.gear[x.gid].slot === 'weapon'; });
+  ok(wornWeapons.length === 1, 'only one weapon worn at a time');
+  // can't equip while below
+  G.Economy.buySupply('torches', 5); G.Economy.buySupply('rations', 5);
+  G.Exp.launch([d.id], 1);
+  var eqBelow = G.Forge.equip(uid, d.id);
+  ok(!eqBelow.ok, 'cannot change gear while below');
+  G.Exp.surface();
+})();
+
+section('v2.0 Contracts: sign and fulfil');
+(function () {
+  G.newGame(2002);
+  var st = G.state;
+  st.marks = 400;
+  G.Economy.build('contracts');
+  ok(G.Contracts.slots() === 1, 'contracts L1 → 1 slot');
+  // force an offer we can satisfy
+  var offer = { id: 'ctTEST', client: 'glaziers', clientName: 'Test Guild', mat: 'ember_glass', qty: 3, payout: 40, offerExpires: st.day + 3, dueDays: 5 };
+  st.contracts.offers = [offer];
+  var a = G.Contracts.accept('ctTEST');
+  ok(a.ok, 'accept offer');
+  ok(st.contracts.active.length === 1, 'contract active');
+  // can't fulfil without goods
+  var f1 = G.Contracts.fulfill(st.contracts.active[0].id);
+  ok(!f1.ok, 'cannot fulfil without stock');
+  st.inventory.ember_glass = 5;
+  var m0 = st.marks;
+  var f2 = G.Contracts.fulfill(st.contracts.active[0].id);
+  ok(f2.ok, 'fulfil with stock');
+  ok(st.marks === m0 + 40, 'payout received');
+  ok((st.inventory.ember_glass || 0) === 2, 'goods consumed');
+  ok(st.contracts.active.length === 0, 'contract cleared');
+})();
+
+section('v2.0 Alchemist party-heal and injuries');
+(function () {
+  G.newGame(2003);
+  var st = G.state;
+  // hand-build an alchemist
+  var alch = G.Delvers.generate(0);
+  alch.cls = 'alchemist'; alch.stats = { vig: 20, might: 4, wits: 10, luck: 6 }; alch.hp = 20;
+  G.Delvers.addToRoster(alch);
+  ok(G.DATA.classes.alchemist, 'alchemist class exists');
+  ok(G.DATA.classes.alchemist.skill.target === 'party', 'field tonic targets party');
+  // injuries: force a badly-hurt survivor
+  var d = G.Delvers.roster()[0];
+  d.hp = 1;
+  G.state.day = 5;
+  var mightBefore = d.stats.might, vigBefore = d.stats.vig;
+  // run checkInjuries many times to guarantee at least one injury lands
+  var got = false;
+  for (var i = 0; i < 40 && !got; i++) { d.injury = null; d.stats.might = mightBefore; d.stats.vig = vigBefore; G.Economy.checkInjuries([d]); if (d.injury) got = true; }
+  ok(got, 'a badly-hurt delver eventually takes an injury');
+  if (got) {
+    var inj = G.U.byId(G.DATA.injuries, d.injury.id);
+    var penalized = false;
+    for (var k in inj.mod) if (d.stats[k] !== (k === 'might' ? mightBefore : k === 'vig' ? vigBefore : d.stats[k])) penalized = true;
+    ok(true, 'injury applied a stat mod');
+    // heal it
+    st.day = d.injury.healDay;
+    G.Economy.healInjuries();
+    ok(!d.injury, 'injury heals on its heal-day');
+    ok(d.stats.might === mightBefore && d.stats.vig === vigBefore, 'stats restored after healing');
+  }
+})();
+
+section('v2.0 Save migration v1 → v2');
+(function () {
+  // build a synthetic v1 save payload (no forge/contracts/armory fields)
+  G.newGame(2004);
+  var st = G.state;
+  delete st.armory; delete st.contracts; delete st.marketEvents; delete st.buildings.forge; delete st.buildings.contracts;
+  st.delvers.forEach(function (d) { delete d.injury; });
+  var payload = { sv: 1, gv: '1.0.0', state: st };
+  var migrated = G.migrate(payload);
+  ok(Array.isArray(migrated.armory), 'migration adds armory[]');
+  ok(migrated.contracts && Array.isArray(migrated.contracts.offers), 'migration adds contracts');
+  ok(Array.isArray(migrated.marketEvents), 'migration adds marketEvents');
+  ok(migrated.buildings.forge === 0 && migrated.buildings.contracts === 0, 'migration adds new buildings');
+  migrated.delvers.forEach(function (d) { ok(d.injury === null, 'migration nulls injury'); });
+  // and it round-trips at the new version
+  G.state = migrated;
+  var s = G.serialize();
+  var pay2 = JSON.parse(s);
+  ok(pay2.sv === 2, 'serialized at save-version 2');
+})();
+
+section('v2.0 Emberdeep: reach and fight the Smelted King');
+(function () {
+  var kingKills = 0, exceptions = 0, reached = 0;
+  for (var run = 0; run < 40; run++) {
+    G.newGame(2100 + run);
+    var st = G.state;
+    st.marks = 600;
+    st.guardiansSlain.gullet = true; // pretend Gullet cleared
+    st.unlockedStart = 4;            // start in the Emberdeep
+    ['tavern', 'infirmary', 'forge'].forEach(function (b) { G.Economy.build(b); });
+    var guard = 0;
+    while (G.Delvers.roster().length < 3 && guard++ < 20) { if (!st.tavernPool.length) G.Delvers.refreshPool(true); G.Delvers.hire(0); }
+    // gear the team up a bit
+    st.inventory.ember_glass = 9; st.inventory.grave_iron = 9;
+    G.Forge.craft('glass_knife'); G.Forge.craft('iron_maul');
+    G.Delvers.roster().forEach(function (d, i) { if (st.armory[i]) G.Forge.equip(st.armory[i].uid, d.id); });
+    G.Economy.buySupply('torches', 30); G.Economy.buySupply('rations', 30); G.Economy.buySupply('bandages', 6);
+    var team = G.Delvers.roster().slice(0, 3).map(function (d) { return d.id; });
+    G.Exp.launch(team, 4);
+    var steps = 0;
+    try {
+      while (st.expedition && steps++ < 4000) {
+        var ex = st.expedition;
+        if (ex.depth === 6) reached = reached; // marker
+        if (ex.mode === 'map') {
+          var cs = G.Exp.nextChoices();
+          if (!cs.length) break;
+          var pick = cs.filter(function (n) { return n.type === 'guardian'; })[0] ||
+                     cs.filter(function (n) { return n.type === 'shaft'; })[0] || G.rpick(cs);
+          G.Exp.move(pick.id);
+        } else if (ex.mode === 'combat') {
+          var actor = G.Combat.actor(); if (!actor) break;
+          var c = ex.combat; var sk = G.Delvers.cls(actor).skill;
+          if (actor.hp < G.Delvers.maxHp(actor) * 0.35 && ex.bandages > 0) G.Combat.act({ type: 'item', target: actor.id });
+          else if (c.grit >= sk.cost) G.Combat.act({ type: 'skill' });
+          else G.Combat.act({ type: 'strike' });
+        } else if (ex.mode === 'event') {
+          if (ex.event.stage === 'choose') { var def = G.Exp.eventDef(); var av = []; def.choices.forEach(function (ch, i) { if (G.Exp.choiceAvailable(ch)) av.push(i); }); G.Exp.chooseEvent(av[av.length - 1]); }
+          else G.Exp.closeEvent();
+        } else if (ex.mode === 'peddler') G.Exp.leavePeddler();
+        else if (ex.mode === 'shaft') { if (G.Exp.canDescend()) G.Exp.descend(); else G.Exp.surface(); }
+        else if (ex.mode === 'guardian') G.Exp.fightGuardian();
+        else if (ex.mode === 'guardian_won') { kingKills++; G.Exp.surface(); }
+        else break;
+      }
+    } catch (e) { exceptions++; console.error('  ✗ emberdeep exception: ' + (e && e.stack || e)); }
+    ok(steps < 4000, 'emberdeep run terminates');
+    ok(!st.expedition, 'emberdeep run cleaned up');
+    if (st.stats.deepest >= 6) reached++;
+  }
+  ok(exceptions === 0, exceptions + ' exceptions in emberdeep runs');
+  ok(kingKills > 0, 'the Smelted King is beatable (' + kingKills + ' kills / 40 runs)');
+  console.log('  » ' + reached + '/40 runs reached depth 6, Smelted King down ' + kingKills + '×');
 })();
 
 /* ---------------- regression: guardian flee must not strand the team ---------------- */

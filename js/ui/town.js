@@ -9,6 +9,8 @@
 
   function tabs(panel) {
     var names = [['company', 'Company'], ['tavern', 'Tavern'], ['market', 'Market'], ['build', 'Build']];
+    if (G.bld('forge')) names.push(['forge', 'Forge']);
+    if (G.bld('contracts')) names.push(['contracts', 'Contracts']);
     var row = h('div.tabs');
     names.forEach(function (n) {
       row.appendChild(h('button' + (UI.townTab === n[0] ? '.active' : ''), {
@@ -35,6 +37,22 @@
     bar.appendChild(h('i', { style: 'width:' + Math.round(100 * d.hp / mhp) + '%' }));
     card.appendChild(bar);
     card.appendChild(h('div.sub', { text: d.hp + '/' + mhp + ' hp — ' + trait.name + ' · ' + fear.name.toLowerCase() }));
+    // XP bar
+    var xpb = h('div.bar.xp');
+    xpb.appendChild(h('i', { style: 'width:' + Math.round(100 * d.xp / G.Delvers.xpNeed(d)) + '%' }));
+    card.appendChild(xpb);
+    // gear glyphs
+    if (G.Forge) {
+      var gear = G.Forge.gearOf(d);
+      if (gear.length) {
+        card.appendChild(h('div.sub', { html: gear.map(function (g) { return '<span class="pill">' + g.name + '</span>'; }).join(' ') }));
+      }
+    }
+    // injury flag
+    if (d.injury) {
+      var inj = G.U.byId(G.DATA.injuries, d.injury.id);
+      card.appendChild(h('div.sub', { html: '<span class="down">✚ ' + (inj ? inj.name : 'Injured') + ' (' + Math.max(0, d.injury.healDay - G.state.day) + 'd)</span>' }));
+    }
     if (opts.extra) card.appendChild(opts.extra);
     return card;
   }
@@ -117,6 +135,12 @@
   function renderMarket(panel) {
     var st = G.state;
     panel.appendChild(h('h2', { text: 'Market & Stores' }));
+    // active news ticker
+    if (st.marketEvents && st.marketEvents.length) {
+      st.marketEvents.forEach(function (ev) {
+        panel.appendChild(h('div.bark', { html: '📰 ' + UI.esc(ev.head) + ' <span class="sub">(' + (ev.until - st.day + 1) + 'd left)</span>' }));
+      });
+    }
     var inv = st.inventory;
     var table = h('table.mkt');
     table.appendChild(h('tr', {}, [
@@ -126,12 +150,14 @@
     G.DATA.materialList().forEach(function (m) {
       var qty = inv[m.id] || 0;
       var price = G.Economy.sellPrice(m.id);
-      var prev = (st.marketPrev && st.marketPrev[m.id]) || st.market[m.id];
-      var dir = st.market[m.id] > prev ? '<span class="up">▲</span>' : (st.market[m.id] < prev ? '<span class="down">▼</span>' : '·');
+      var cur = G.Economy.price(m.id);
+      var prev = (st.marketPrev && st.marketPrev[m.id]) || cur;
+      var dir = cur > prev ? '<span class="up">▲</span>' : (cur < prev ? '<span class="down">▼</span>' : '·');
       if (qty === 0 && m.tier > 1) return; // keep list short until goods appear
       anyRow = true;
+      var shocked = Math.abs(G.Economy.shockMult(m.id) - 1) > 0.01;
       var tr = h('tr', { title: m.desc });
-      tr.appendChild(h('td', { html: m.name + ' <span class="sub">' + dir + '</span>' }));
+      tr.appendChild(h('td', { html: m.name + ' <span class="sub">' + dir + '</span>' + (shocked ? ' <span class="pill">news</span>' : '') }));
       tr.appendChild(h('td.r', { text: qty ? qty : '—' }));
       tr.appendChild(h('td.r', { html: '<b>' + price + '</b>ᵯ' }));
       var td = h('td.r');
@@ -146,7 +172,7 @@
     if (!anyRow) panel.appendChild(h('p.sub', { text: 'Nothing in the storehouse yet. The Maw has plenty.' }));
     panel.appendChild(h('p.sub', { style: 'margin-top:8px', text: 'Prices drift daily and sag if you flood the market. The shopfront also sells a few goods on its own each day — at a premium.' }));
     var totVal = 0;
-    for (var id in inv) totVal += (st.market[id] || 0) * inv[id];
+    for (var id in inv) totVal += G.Economy.price(id) * inv[id];
     panel.appendChild(h('p', { html: 'Stock value at market: <b>' + G.U.fmt(totVal) + 'ᵯ</b>' }));
   }
 
@@ -178,10 +204,17 @@
   }
 
   UI.renderTown = function (panel) {
+    // a tab may vanish (e.g. building not yet built); fall back to Company
+    var valid = { company: 1, tavern: 1, market: 1, build: 1 };
+    if (G.bld('forge')) valid.forge = 1;
+    if (G.bld('contracts')) valid.contracts = 1;
+    if (!valid[UI.townTab]) UI.townTab = 'company';
     tabs(panel);
     if (UI.townTab === 'company') renderCompany(panel);
     else if (UI.townTab === 'tavern') renderTavern(panel);
     else if (UI.townTab === 'market') renderMarket(panel);
+    else if (UI.townTab === 'forge') UI.renderForge(panel);
+    else if (UI.townTab === 'contracts') UI.renderContracts(panel);
     else renderBuild(panel);
   };
 

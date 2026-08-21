@@ -26,7 +26,8 @@
       trait: trait.id, fear: fear.id,
       alive: true, hiredDay: st.day,
       kills: 0, delves: 0,
-      freeDays: 0 // wage-free days (rescue recruits)
+      freeDays: 0, // wage-free days (rescue recruits)
+      injury: null // v2.0
     };
   };
 
