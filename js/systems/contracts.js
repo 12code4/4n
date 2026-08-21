@@ -3,7 +3,9 @@
   var G = (globalThis.G = globalThis.G || {});
   var C = (G.Contracts = {});
 
-  C.slots = function () { return G.bldFx('contracts', 'slots', 0); };
+  C.slots = function () {
+    return G.bldFx('contracts', 'slots', 0) + ((G.Renown && G.Renown.hasPerk('contract1')) ? 1 : 0);
+  };
 
   /* materials the player can plausibly source: biomes up to the deepest reached/unlocked */
   C.knownMats = function () {
@@ -94,7 +96,10 @@
     if (st.inventory[a.mat] <= 0) delete st.inventory[a.mat];
     st.marks += a.payout;
     st.stats.earned += a.payout;
+    st.stats.contractsDone = (st.stats.contractsDone || 0) + 1;
     ct.active.splice(idx, 1);
+    if (G.Renown) G.Renown.award('contract');
+    if (G.Achieve) G.Achieve.check();
     G.log('Contract delivered: ' + a.clientName + ' pays ' + a.payout + 'ᵯ. Word of the company spreads.', 'good');
     G.emit('contracts');
     return { ok: true };

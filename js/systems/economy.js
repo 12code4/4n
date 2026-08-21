@@ -8,7 +8,10 @@
   E.sellPrice = function (matId) {
     var p = E.price(matId);
     var bonus = G.bldFx('assay', 'sellBonus', 0) + G.bldFx('storehouse', 'priceBonus', 0);
-    return Math.max(1, Math.round(p * (1 + bonus)));
+    if (G.Renown && G.Renown.hasPerk('sell5')) bonus += 0.05;      // renown tier perk
+    if (G.Rivals) bonus += G.Rivals.claimSellBonus(matId);          // player-owned biome claim
+    var mult = (1 + bonus) * (G.Relics ? G.Relics.mult('sellMult') : 1); // relic
+    return Math.max(1, Math.round(p * mult));
   };
 
   E.sell = function (matId, qty) {
@@ -177,9 +180,11 @@
     E.marketDrift();
     E.marketEventsTick();
     if (G.Contracts) G.Contracts.dailyTick();
+    if (G.Rivals) G.Rivals.dailyTick();
     E.healInjuries();
     G.Delvers.dailyHeal();
     G.Delvers.refreshPool();
+    if (G.Achieve) G.Achieve.check();
   };
 
   /* End the day: the core surface tick. Blocked while an expedition is below. */
@@ -202,6 +207,7 @@
   /* ---------- injuries (v2.0) ---------- */
   E.checkInjuries = function (delvers) {
     var st = G.state;
+    if (G.Relics && G.Relics.flag('startInjuryImmune')) return; // salt-charm wards all wounds
     delvers.forEach(function (d) {
       if (!d.alive || d.injury) return;
       if (d.hp / G.Delvers.maxHp(d) > 0.35) return;

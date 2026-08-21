@@ -11,7 +11,7 @@
       _rng: null,
       day: 1,
       marks: G.BAL.startMarks,
-      buildings: { storehouse: 1, tavern: 0, assay: 0, infirmary: 0, forge: 0, contracts: 0 },
+      buildings: { storehouse: 1, tavern: 0, assay: 0, infirmary: 0, forge: 0, contracts: 0, charterhall: 0 },
       delvers: [],
       nextDelverN: 1,
       tavernPool: [],
@@ -23,6 +23,13 @@
       marketEvents: [],                    // active price shocks (v2)
       armory: [],                          // company gear pool (v2)
       contracts: { offers: [], active: [] }, // v2
+      renown: 0,                           // v3
+      relics: { owned: [], slotted: [] },  // v3
+      achievements: [],                    // v3
+      quests: {},                          // v3 questline stages
+      questPerks: {},                      // v3
+      rivals: null,                        // v3 (lazily init'd by Rivals)
+      claims: {},                          // v3 biomeId -> owner
       unlockedStart: 1,                    // deepest depth an expedition may START at
       guardiansSlain: {},                  // biomeId -> true
       expedition: null,
@@ -30,7 +37,8 @@
       journalSeen: [],                     // page ids unlocked
       journalRead: [],
       flags: {},
-      stats: { delves: 0, deaths: 0, kills: 0, earned: 0, spent: 0, deepest: 0, daysRun: 1, sold: 0 },
+      stats: { delves: 0, deaths: 0, kills: 0, earned: 0, spent: 0, deepest: 0, daysRun: 1, sold: 0,
+        crafted: 0, contractsDone: 0, rivalWins: 0, honored: 0 },
       unpaid: {},                          // delverId -> consecutive unpaid days
       log: [],
       ui: { bark: 0 }

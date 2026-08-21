@@ -365,6 +365,10 @@
         cx.fillRect(x - 4, y + 4, 2.5, 3); cx.fillRect(x + 1.5, y + 4, 2.5, 3);
         cx.beginPath(); cx.arc(x - 2.5, y - 3, 1.4, 0, Math.PI * 2); cx.arc(x + 2.5, y - 3, 1.4, 0, Math.PI * 2); cx.fill();
         break;
+      case 'rival': // crossed flags
+        cx.beginPath(); cx.moveTo(x - 5, y + 6); cx.lineTo(x - 2, y - 6); cx.moveTo(x + 5, y + 6); cx.lineTo(x + 2, y - 6); cx.stroke();
+        cx.beginPath(); cx.moveTo(x - 2, y - 6); cx.lineTo(x - 7, y - 4); cx.lineTo(x - 2, y - 2); cx.moveTo(x + 2, y - 6); cx.lineTo(x + 7, y - 4); cx.lineTo(x + 2, y - 2); cx.stroke();
+        break;
     }
     cx.restore();
   }
@@ -442,6 +446,7 @@
       case 'warden': return 62 * s + 8;
       case 'hound': return 14 + 12 * s;
       case 'king': return 60 * s + 10;
+      case 'librarian': return 58 * s + 10;
       default: return 40;
     }
   }
@@ -637,6 +642,31 @@
         }
         cx.fillStyle = lite;
         cx.beginPath(); cx.arc(x - 3.5 * S, y - 45 * S, 1.8, 0, Math.PI * 2); cx.arc(x + 3.5 * S, y - 45 * S, 1.8, 0, Math.PI * 2); cx.fill();
+        break;
+      }
+      case 'librarian': {
+        // a robed keeper of drowned books, ink dripping, a lantern-eye
+        cx.fillStyle = flash ? '#fff' : hsl(hue, 30, 22);
+        F.poly(cx, [[x - 22 * S, y + 24], [x - 14 * S, y - 44 * S], [x + 14 * S, y - 44 * S], [x + 22 * S, y + 24]]); cx.fill(); // robe
+        cx.fillStyle = flash ? '#fff' : hsl(hue, 20, 14);
+        cx.beginPath(); cx.arc(x, y - 46 * S, 11 * S, 0, Math.PI * 2); cx.fill(); // cowl
+        // single lantern eye
+        var lp = 0.6 + 0.3 * Math.sin(t * 2);
+        F.glow(cx, x, y - 46 * S, 16 * S, hsl(hue, 85, 60), lp);
+        cx.fillStyle = hsl(hue, 85, 70);
+        cx.beginPath(); cx.arc(x, y - 46 * S, 4 * S, 0, Math.PI * 2); cx.fill();
+        // floating pages
+        cx.fillStyle = flash ? '#fff' : 'rgba(200,220,215,0.85)';
+        for (var pg = 0; pg < 5; pg++) {
+          var ang = t * 0.8 + pg * 1.257;
+          var px = x + Math.cos(ang) * (20 + pg * 3) * S, py = y - 20 * S + Math.sin(ang) * 14 * S;
+          cx.save(); cx.translate(px, py); cx.rotate(ang);
+          cx.fillRect(-3 * S, -4 * S, 6 * S, 8 * S);
+          cx.restore();
+        }
+        // ink drip
+        cx.strokeStyle = hsl(hue, 40, 30); cx.lineWidth = 2;
+        cx.beginPath(); cx.moveTo(x - 6 * S, y + 6); cx.lineTo(x - 6 * S, y + 18 + Math.sin(t * 3) * 3); cx.stroke();
         break;
       }
     }

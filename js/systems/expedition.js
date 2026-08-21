@@ -29,6 +29,12 @@
       }
       rows.push(row);
     }
+    // rivals may hold a stair on floors deep enough for them to reach (v3.0)
+    if (G.Rivals && G.Rivals.active() && depth >= 4 && G.rchance(0.28)) {
+      var rr0 = rows[1 + Math.floor(G.rng() * nRanks)];
+      var rc0 = rr0[Math.floor(G.rng() * rr0.length)];
+      if (rc0.type === 'fight' || rc0.type === 'event') rc0.type = 'rival';
+    }
     // every floor owes at least one cache — the Maw trades, it doesn't stiff
     var hasCache = false;
     for (var cr = 1; cr <= nRanks; cr++)
@@ -122,7 +128,10 @@
   X.enterFloor = function (depth) {
     var st = G.state, ex = st.expedition;
     ex.depth = depth;
-    st.stats.deepest = Math.max(st.stats.deepest, depth);
+    if (depth > (st.stats.deepest || 0)) {
+      st.stats.deepest = depth;
+      if (G.Renown) G.Renown.award('depthRecord'); // new company record
+    }
     ex.map = X.genFloor(depth);
     ex.at = ex.map.rows[0][0].id;
     ex.map.rows[0][0].done = true;
@@ -185,9 +194,12 @@
     var node = X.findNode(ex.map, nodeId);
     ex.at = nodeId;
 
-    // torchlight
-    if (ex.torches > 0) ex.torches--;
-    else {
+    // torchlight — a relic (the Blank Card) can make the dark hungrier for torches
+    var torchCost = 1 + (G.Relics ? G.Relics.add('torchDrain') : 0);
+    if (ex.torches >= torchCost) {
+      ex.torches -= torchCost;
+    } else {
+      ex.torches = 0; // burn what's left, then grope
       var team = X.team();
       var hurt = 0;
       team.forEach(function (d) {
@@ -223,6 +235,11 @@
       case 'guardian': {
         // resolved via shaft-style choice UI first (approach), then fight
         ex.mode = 'guardian';
+        break;
+      }
+      case 'rival': {
+        node.done = true;
+        X.startRival(depth);
         break;
       }
       case 'event': {
@@ -428,10 +445,14 @@
   X.grantLootValue = function (value) {
     var ex = G.state.expedition;
     var biome = G.DATA.biomeForDepth(ex.depth);
-    // greedy trait: more value
+    // greedy trait + ledger-charm gear + relic all lift loot value
     var team = X.team();
     var mult = 1;
-    team.forEach(function (d) { var t = G.Delvers.trait(d); if (t.lootMult) mult = Math.max(mult, t.lootMult); });
+    team.forEach(function (d) {
+      var t = G.Delvers.trait(d); if (t.lootMult) mult = Math.max(mult, t.lootMult);
+      if (G.Forge) mult += G.Forge.fx(d, 'loot');
+    });
+    if (G.Relics) mult *= G.Relics.mult('lootMult');
     value = Math.round(value * mult);
     var tries = 0;
     while (value > 0 && tries++ < 30) {
@@ -449,7 +470,8 @@
   /* ---------- peddler ---------- */
   X.peddlerBuy = function (kind) {
     var st = G.state, ex = st.expedition;
-    var cost = Math.ceil((G.BAL.supplyCost[kind] || 2) * 1.6);
+    var markup = (G.Renown && G.Renown.hasPerk('peddler')) ? 1.2 : 1.6; // renown perk
+    var cost = Math.ceil((G.BAL.supplyCost[kind] || 2) * markup);
     var funds = st.marks + ex.marksFound;
     if (funds < cost) return { ok: false, msg: 'Not enough marks.' };
     var fromFound = Math.min(ex.marksFound, cost);
@@ -474,6 +496,55 @@
   X.leavePeddler = function () {
     var ex = G.state.expedition;
     if (ex && ex.mode === 'peddler') { ex.mode = 'map'; G.emit('expedition'); }
+  };
+
+  /* ---------- rival encounter (v3.0) ---------- */
+  X.startRival = function (depth) {
+    var ex = G.state.expedition;
+    if (!G.Rivals) { ex.mode = 'map'; return; }
+    var r = G.Rivals.pickRival();
+    ex.rival = { id: r.id, resolved: false };
+    ex.mode = 'rival';
+    X.elog('Another charter’s lanterns bob in the dark — ' + G.Rivals.def(r.id).name + '.', 'info');
+  };
+  X.rivalDef = function () {
+    var ex = G.state.expedition;
+    return ex && ex.rival ? G.Rivals.def(ex.rival.id) : null;
+  };
+  X.rivalTrade = function () {
+    var st = G.state, ex = st.expedition;
+    var total = 0;
+    for (var id in ex.loot) total += Math.floor(G.Economy.price(id) * 0.85) * ex.loot[id]; // better than the peddler
+    if (!total) { X.elog('You have nothing to trade; the factor shrugs and moves on.', 'info'); }
+    else {
+      ex.loot = {}; ex.marksFound += total;
+      X.elog(X.rivalDef().parley.trade + ' They pay ' + total + 'ᵯ.', 'good');
+    }
+    ex.mode = 'map'; ex.rival = null; G.emit('expedition');
+  };
+  X.rivalWager = function () {
+    var st = G.state, ex = st.expedition;
+    var cost = 8 + ex.depth * 2;
+    if (st.marks + ex.marksFound < cost) return { ok: false, msg: 'Not enough marks for the wager.' };
+    var fromFound = Math.min(ex.marksFound, cost);
+    ex.marksFound -= fromFound; st.marks -= (cost - fromFound);
+    // buy a bypass of the next rank (their map intel)
+    ex.bypass = true;
+    X.elog(X.rivalDef().parley.wager + ' You buy the safe line past the next stair.', 'good');
+    ex.mode = 'map'; ex.rival = null; G.emit('expedition');
+    return { ok: true };
+  };
+  X.rivalBrawl = function () {
+    var ex = G.state.expedition;
+    var rid = ex.rival.id;
+    X.elog(X.rivalDef().parley.brawl, 'bad');
+    ex.rival = null;
+    G.Combat.start(G.Rivals.encounterCrew(ex.depth), { brawl: true, rivalId: rid });
+    G.emit('expedition');
+  };
+  X.leaveRival = function () {
+    var ex = G.state.expedition;
+    if (ex && ex.mode === 'rival') { ex.mode = 'map'; ex.rival = null; G.emit('expedition'); }
   };
 
   /* ---------- shaft / guardian / descent ---------- */
@@ -533,9 +604,12 @@
       kills: ex.killCount, depth: st.stats.deepest, wiped: false,
       survivors: X.team().length
     };
+    // achievement: end a depth-3+ run with the torches spent
+    if (G.Achieve && ex.startDepth >= 3 && ex.torches === 0) G.Achieve.grant('no_torch');
     st.expedition = null;
     st.lastRun = summary;
     G.log('The winch hauls the team up: goods worth ~' + haul + 'ᵯ and ' + summary.marks + 'ᵯ in coin.', 'story');
+    if (G.Achieve) G.Achieve.check();
     G.emit('returned', summary);
     G.save();
     return summary;

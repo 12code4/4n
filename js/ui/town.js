@@ -11,6 +11,7 @@
     var names = [['company', 'Company'], ['tavern', 'Tavern'], ['market', 'Market'], ['build', 'Build']];
     if (G.bld('forge')) names.push(['forge', 'Forge']);
     if (G.bld('contracts')) names.push(['contracts', 'Contracts']);
+    if (G.bld('charterhall')) names.push(['hall', 'Hall']);
     var row = h('div.tabs');
     names.forEach(function (n) {
       row.appendChild(h('button' + (UI.townTab === n[0] ? '.active' : ''), {
@@ -28,11 +29,28 @@
     var fear = G.Delvers.fear(d);
     var mhp = G.Delvers.maxHp(d);
     var card = h('div.card' + (opts.selected ? '.selected' : ''), opts.onclick ? { onclick: opts.onclick, style: 'cursor:pointer' } : {});
-    card.appendChild(h('div.row', {}, [
-      h('span.name', { text: d.name }),
-      h('span.sub', { text: cls.name + ' L' + d.lvl })
-    ]));
+    var head = h('div.row');
+    var left = h('div', { style: 'display:flex;align-items:center;gap:9px' });
+    if (G.Portrait && typeof document !== 'undefined') {
+      try { left.appendChild(G.Portrait.get(d, 42)); } catch (e) {}
+    }
+    left.appendChild(h('span.name', { text: d.name }));
+    head.appendChild(left);
+    head.appendChild(h('span.sub', { text: cls.name + ' L' + d.lvl }));
+    card.appendChild(head);
     card.appendChild(h('div.statline', { html: 'VIG <b>' + d.stats.vig + '</b> · MGT <b>' + d.stats.might + '</b> · WIT <b>' + d.stats.wits + '</b> · LCK <b>' + d.stats.luck + '</b>' }));
+    // pending talent choice
+    if (d.pendingTalents && d.pendingTalents.length) {
+      card.appendChild(h('button.small.primary', { text: '✦ Choose talent (L' + d.pendingTalents[0] + ')', style: 'margin-top:4px', onclick: function (ev) { ev.stopPropagation(); UI.showTalentChoice(d.id); } }));
+    }
+    // learned talents
+    if (d.talents && d.talents.length) {
+      var tnames = d.talents.map(function (tid) {
+        for (var lv in (G.DATA.talents[d.cls] || {})) { var f = G.U.byId(G.DATA.talents[d.cls][lv], tid); if (f) return f.name; }
+        return tid;
+      });
+      card.appendChild(h('div.sub', { html: tnames.map(function (n) { return '<span class="pill">✦ ' + n + '</span>'; }).join(' ') }));
+    }
     var bar = h('div.bar.hp');
     bar.appendChild(h('i', { style: 'width:' + Math.round(100 * d.hp / mhp) + '%' }));
     card.appendChild(bar);
@@ -208,6 +226,7 @@
     var valid = { company: 1, tavern: 1, market: 1, build: 1 };
     if (G.bld('forge')) valid.forge = 1;
     if (G.bld('contracts')) valid.contracts = 1;
+    if (G.bld('charterhall')) valid.hall = 1;
     if (!valid[UI.townTab]) UI.townTab = 'company';
     tabs(panel);
     if (UI.townTab === 'company') renderCompany(panel);
@@ -215,6 +234,7 @@
     else if (UI.townTab === 'market') renderMarket(panel);
     else if (UI.townTab === 'forge') UI.renderForge(panel);
     else if (UI.townTab === 'contracts') UI.renderContracts(panel);
+    else if (UI.townTab === 'hall') UI.renderCharterHall(panel);
     else renderBuild(panel);
   };
 

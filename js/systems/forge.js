@@ -29,6 +29,8 @@
       if (st.inventory[id] <= 0) delete st.inventory[id];
     }
     st.armory.push({ uid: G.U.uid('gr'), gid: gearId, by: null });
+    st.stats.crafted = (st.stats.crafted || 0) + 1;
+    if (G.Achieve) G.Achieve.check();
     G.log('The forge rings: ' + def.name + ' is finished.', 'good');
     G.emit('armory');
     return { ok: true };

@@ -6,7 +6,8 @@
 
   var nodeNames = {
     fight: 'Trouble', event: 'Something…', cache: 'Cache', hazard: 'Hazard',
-    rest: 'Hollow', peddler: 'Lantern-light', shaft: 'The Shaft', guardian: 'The Guardian'
+    rest: 'Hollow', peddler: 'Lantern-light', shaft: 'The Shaft', guardian: 'The Guardian',
+    rival: 'Rival Lanterns'
   };
   var nodeHints = {
     fight: 'Movement in the dark. Steel out.',
@@ -16,7 +17,8 @@
     rest: 'A defensible spot to breathe.',
     peddler: 'A deep peddler trades here.',
     shaft: 'A way down — and a way home.',
-    guardian: 'Something large keeps this stair.'
+    guardian: 'Something large keeps this stair.',
+    rival: 'Another charter holds the way.'
   };
 
   function teamStrip(panel) {
@@ -44,6 +46,7 @@
     var biome = G.DATA.biomeForDepth(ex.depth);
 
     if (ex.mode === 'event') return renderEvent(panel);
+    if (ex.mode === 'rival') return UI.renderRival(panel);
     if (ex.mode === 'peddler') return renderPeddler(panel);
     if (ex.mode === 'shaft') return renderShaft(panel);
     if (ex.mode === 'guardian') return renderGuardianApproach(panel);

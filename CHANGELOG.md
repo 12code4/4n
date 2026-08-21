@@ -1,5 +1,53 @@
 # Changelog — The Gilded Maw
 
+## v3.0 — "Rivals & Renown"
+
+You are not the only charter delving the Maw — and the valley is starting to
+keep score.
+
+### Rivals
+- Two AI charters, the **Blacklantern Syndicate** and the **Cartographers'
+  Union**, run their own simulated economies: they earn, they push depth, they
+  snipe your open contracts, and they plant **depth claims** on biomes you're
+  slow to clear (a claim you hold is +5% sell on that biome's goods).
+- New underground **Rival Lanterns** node: **trade** your haul at a good rate,
+  **wager** for map intel (skip a rank), or **brawl** for the stair — a
+  non-lethal fight where the loser only drops loot. Winning brawls earns renown.
+
+### Renown & the Charter Hall
+- **Renown** rises with guardian kills, contracts, depth records, honored dead
+  and rival wins, across five ranks (Provisional → The Gilded Charter), each
+  granting a passive perk (hire discount, sell bonus, cheaper peddlers, +1
+  contract slot).
+- New **Charter Hall** building: standings vs. rivals, rival intel (L2),
+  relic slots, questlines, the memorial, and the deeds ledger.
+
+### The Sunken Archive (depths 7–9)
+- A drowned library in ink-black water; teal palette. 4 materials, 6 enemies
+  with new behaviours (Ink Revenant smears your loot, Custodian wards itself,
+  Drowned Scholar curses your damage), and the guardian **The Librarian** —
+  who *silences* your Grit and *indexes* your best fighter for a doubled blow.
+- 6 events, journal pages 7–9 (Maren's story turns).
+
+### Growth & keepsakes
+- **Talents**: at levels 3/6/9 each delver chooses 1 of 2 class talents —
+  16 per class path, all self-contained (First Blood, Assassinate, Overchannel,
+  Revivify Draught, Stone Skin…).
+- **Company relics**: guardian first-kills award powerful passives with a real
+  drawback (the Warden's Bell, a Crown Cooling, the Blank Card…), slotted at
+  the Charter Hall.
+
+### The valley remembers
+- **Memorial wall** with honor-the-fallen; **20 achievements**; three
+  **townsfolk questlines** (Petra's minted-coin mystery, Dov's tab, the
+  Priest's list) with lasting perks.
+- **Procedural portraits** for every delver on their card.
+
+### Under the hood
+- Save migration v2 → v3. New tests: renown/perks, relic slotting & fx,
+  talent gating, 40 non-lethal brawls (0 deaths), 40 Archive runs beating the
+  Librarian, migration round-trip. Full suite: 24k+ checks.
+
 ## v2.0 — "Forge & Fortune"
 
 Mastery over goods: craft what you delve, and take the industry down a level.

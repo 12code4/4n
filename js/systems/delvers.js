@@ -27,7 +27,9 @@
       alive: true, hiredDay: st.day,
       kills: 0, delves: 0,
       freeDays: 0, // wage-free days (rescue recruits)
-      injury: null // v2.0
+      injury: null, // v2.0
+      talents: [], pendingTalents: [], // v3.0
+      face: G.rint(0, 0x7fffffff) // v3.0 portrait seed
     };
   };
 
@@ -52,7 +54,13 @@
   };
   D.get = function (id) { return G.U.byId(G.state.delvers, id); };
 
-  D.hireCost = function (d) { return G.BAL.hireBase + (d.lvl - 1) * 8 + Math.max(0, G.U.sum(['might', 'wits', 'luck'], function (k) { return d.stats[k]; }) - 16); };
+  D.hireCost = function (d) {
+    var base = G.BAL.hireBase + (d.lvl - 1) * 8 + Math.max(0, G.U.sum(['might', 'wits', 'luck'], function (k) { return d.stats[k]; }) - 16);
+    var mult = 1;
+    if (G.Renown && G.Renown.hasPerk('hire10')) mult *= 0.9;     // renown discount
+    if (G.Relics) mult *= G.Relics.mult('hireMult');             // relic cost modifier
+    return Math.max(1, Math.round(base * mult));
+  };
 
   D.refreshPool = function (force) {
     var st = G.state;
@@ -61,6 +69,8 @@
     var quality = G.bldFx('tavern', 'quality', 0);
     if (!force && st.poolDay === st.day) return;
     st.poolDay = st.day;
+    // the valley's veterans favour a renowned charter (Dov's questline perk)
+    if (G.Quests && G.Quests.hasPerk('veterans_welcome')) quality += 2;
     // rotate: drop one, add until full
     if (st.tavernPool.length && G.rchance(0.6)) st.tavernPool.shift();
     while (st.tavernPool.length < size) {
@@ -112,9 +122,35 @@
       }
       d.stats.vig += G.BAL.levelHp;
       d.hp = Math.min(D.maxHp(d), d.hp + Math.round(D.maxHp(d) * 0.3));
+      // v3.0: talent choice unlocked at levels 3/6/9
+      if (G.DATA.talentLevels && G.DATA.talentLevels.indexOf(d.lvl) >= 0) {
+        d.pendingTalents = d.pendingTalents || [];
+        if (d.pendingTalents.indexOf(d.lvl) < 0) d.pendingTalents.push(d.lvl);
+      }
     }
-    if (ups) G.log(d.name + ' reaches level ' + d.lvl + '.', 'good');
+    if (ups) {
+      G.log(d.name + ' reaches level ' + d.lvl + '.', 'good');
+      if (d.pendingTalents && d.pendingTalents.length) G.log(d.name + ' can choose a new talent (Company tab).', 'good');
+      if (G.Achieve) G.Achieve.check();
+    }
     return ups;
+  };
+
+  /* ---------- talents (v3.0) ---------- */
+  D.hasTalent = function (d, id) { return d.talents && d.talents.indexOf(id) >= 0; };
+  D.chooseTalent = function (delverId, lvl, talentId) {
+    var d = D.get(delverId);
+    if (!d) return { ok: false, msg: 'No such delver.' };
+    if (!d.pendingTalents || d.pendingTalents.indexOf(lvl) < 0) return { ok: false, msg: 'No pending choice at that level.' };
+    var choices = G.DATA.talentChoices(d.cls, lvl) || [];
+    if (!choices.some(function (c) { return c.id === talentId; })) return { ok: false, msg: 'Not an option for this class.' };
+    d.talents = d.talents || [];
+    d.talents.push(talentId);
+    d.pendingTalents = d.pendingTalents.filter(function (x) { return x !== lvl; });
+    var t = G.U.byId(choices, talentId);
+    G.log(d.name + ' learns ' + t.name + '.', 'good');
+    G.emit('roster');
+    return { ok: true };
   };
 
   D.kill = function (d, cause) {
@@ -125,9 +161,16 @@
     st.graveyard.push({
       name: d.name, cls: d.cls, lvl: d.lvl, day: st.day,
       cause: cause || 'the Maw',
-      epitaph: G.rpick(G.DATA.names.epitaphs)
+      epitaph: G.rpick(G.DATA.names.epitaphs), honored: false
     });
+    // the Priest's blessing: a share of a fallen delver's experience returns as renown
+    if (G.Quests && G.Quests.hasPerk('grave_blessing') && G.Renown) {
+      var back = Math.max(2, Math.round(d.lvl * 2));
+      G.Renown.award('blessing', back);
+      G.log('The bone-chapel bells ring for ' + d.name + '. Their lessons return as renown (+' + back + ').', 'story');
+    }
     G.log(d.name + ' is dead. ' + (cause ? '(' + cause + ')' : ''), 'bad');
+    if (G.Achieve) G.Achieve.check();
     G.emit('death', d);
   };
 

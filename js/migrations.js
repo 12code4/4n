@@ -19,4 +19,30 @@
     });
     return st;
   };
+
+  // v2 (2.0 "Forge & Fortune") → v3 (3.0 "Rivals & Renown")
+  G.migrations[2] = function (st) {
+    st.buildings.charterhall = st.buildings.charterhall || 0;
+    if (st.renown === undefined) st.renown = 0;
+    if (!st.relics) st.relics = { owned: [], slotted: [] };
+    if (!st.achievements) st.achievements = [];
+    if (!st.quests) st.quests = {};
+    if (!st.questPerks) st.questPerks = {};
+    if (!st.claims) st.claims = {};
+    if (st.rivals === undefined) st.rivals = null;
+    ['crafted', 'contractsDone', 'rivalWins', 'honored'].forEach(function (k) {
+      if (st.stats[k] === undefined) st.stats[k] = 0;
+    });
+    (st.delvers || []).forEach(function (d) {
+      if (!d.talents) d.talents = [];
+      if (!d.pendingTalents) d.pendingTalents = [];
+      if (d.face === undefined) d.face = ((d.id ? d.id.length * 2654435761 : 1) >>> 0);
+    });
+    (st.graveyard || []).forEach(function (g) { if (g.honored === undefined) g.honored = false; });
+    // seed prices for 3.0 materials
+    G.DATA.materialList().forEach(function (m) {
+      if (st.market[m.id] === undefined) st.market[m.id] = m.base;
+    });
+    return st;
+  };
 })();
